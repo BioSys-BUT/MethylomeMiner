@@ -1,0 +1,5 @@
+__pycache__/
+.pytest_cache
+input_bed_files
+input_roary_output_files_corrected
+old_scripts
