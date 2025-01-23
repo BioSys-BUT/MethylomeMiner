@@ -75,6 +75,7 @@ def load_bed_file(file_path):
     bed_df, is_valid = read_bed_file(file_path)
     if is_valid:
         if has_valid_structure(bed_df):
-            return bed_df[[0, 1, 2, 3, 4, 5, 9]]
+            return bed_df
+            # return bed_df[[0, 1, 2, 3, 4, 5, 9]] # proto to nefunguje!!!!
 
     return None
