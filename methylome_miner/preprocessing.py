@@ -5,31 +5,11 @@ import glob
 import json
 import os
 import statistics
+from pathlib import Path
 
 import pandas as pd
 
-from loading import load_and_check_bed_file_structure
-
-
-METHYLATIONS_KEY = {"21839": "4mC", "m": "5mC", "h": "5hmCG", "a": "6mA"}
-
-
-def prepare_bed_file(bed_file):
-    is_file_ok, bed_df = load_and_check_bed_file_structure(bed_file)
-
-    bed_df.columns = ["contig", "index", "position", "methylation_type", "coverage", "strand", "numbers"]
-
-    bed_df["methylation_type"] = bed_df["methylation_type"].replace(METHYLATIONS_KEY)
-
-    additional_data = bed_df["numbers"].str.split(expand=True)
-    additional_data.columns = [
-        "N_valid_cov", "percent_modified", "N_mod", "N_canonical", "N_other_mod", "N_delete", "N_fail", "N_diff",
-        "N_nocall"
-    ]
-    bed_df = pd.concat([bed_df, additional_data], axis=1).drop(["numbers"], axis=1)
-    bed_df["percent_modified"] = pd.to_numeric(bed_df["percent_modified"], errors="coerce")
-
-    return bed_df
+from loading import parse_bed_file
 
 
 def calculate_med_coverage(path_to_dir_with_bed_files):
@@ -39,9 +19,8 @@ def calculate_med_coverage(path_to_dir_with_bed_files):
     bed_files = glob.glob(os.path.join(path_to_dir_with_bed_files, '*.bed'))
     medians = []
     for bed_file in bed_files:
-        bed_df = pd.read_csv(bed_file, sep='\t', header=None, usecols=[4])
-        median_value = bed_df[4].median()
-        medians.append(median_value)
+        bed_df_part1 = pd.read_csv(bed_file, sep='\t', header=None, engine="pyarrow")
+        medians.append(bed_df_part1[4].median())
     return round(statistics.median(medians))
 
 
@@ -56,23 +35,21 @@ def get_list_of_methylated_position(file_path, path_to_dir_with_bed_files, stran
     :return:
     """
 
-    processed_bed_df = prepare_bed_file(file_path)
+    processed_bed_df = parse_bed_file(file_path)
 
     if min_coverage is None:
         min_coverage = calculate_med_coverage(path_to_dir_with_bed_files)
         print(f"Minimum coverage for methylated position: {min_coverage}")
 
-    if min_percent_modified is None:
-        min_percent_modified = 90
-    elif isinstance(min_percent_modified, (int, float)):
+    if isinstance(min_percent_modified, (int, float)):
         if min_percent_modified < 0 or min_percent_modified > 100:
             print("Invalid input, min_percent_modified must be between 0 and 100.")
             return
 
     strand_condition = True if strand is None else (processed_bed_df['strand'] == strand)
 
-    condition = (processed_bed_df['coverage'] >= min_coverage) & (
-                processed_bed_df['percent modified'] >= min_percent_modified) & strand_condition
+    condition = (processed_bed_df['score'] >= min_coverage) & (
+                processed_bed_df['percent_modified'] >= min_percent_modified) & strand_condition
 
     selected = processed_bed_df[condition]
 
@@ -96,13 +73,15 @@ def get_list_of_methylated_position(file_path, path_to_dir_with_bed_files, stran
 
 
 if __name__ == "__main__":
-    dir_with_bed_files = r'../methylation_calling_results_sup_min_qscore10'
+    file = Path("input_bed_files/KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed")
+    df = load_bed_file(file)
+    dir_with_bed_files = Path("input_bed_files")
     # min_coverage_for_filtering = calculate_med_coverage(dir_with_bed_files)
 
-    output_dir = r'output/csv_files'
-    output_dir2 = r'output/json_files'
-    os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(output_dir2, exist_ok=True)
+    # output_dir = r'output/csv_files'
+    # output_dir2 = r'output/json_files'
+    # os.makedirs(output_dir, exist_ok=True)
+    # os.makedirs(output_dir2, exist_ok=True)
 
     for file_name in os.listdir(dir_with_bed_files):
         if file_name.endswith('.bed'):
@@ -113,6 +92,7 @@ if __name__ == "__main__":
                 full_file_path_to_bed,
                 dir_with_bed_files,
                 min_percent_modified=90,
+                min_coverage=37,
                 strand=None,
                 file_name=file_name
             )

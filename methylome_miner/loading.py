@@ -8,7 +8,30 @@ Is dir with all bed files necessary?
 """
 import pandas as pd
 
-ALLOWED_METHYLATION_TYPES = ["21839", "m", "h", "a"]
+
+METHYLATIONS_KEY = {"21839": "4mC", "m": "5mC", "h": "5hmCG", "a": "6mA"}
+
+# Needs optimization of data types
+BED_STRUCTURE = {
+    "reference_seq": str,
+    "start_index": int,
+    "end_index": int,
+    "modified_base_code": str,
+    "score": int,
+    "strand": str,
+    "start_position": int,
+    "end_position": int,
+    "color": str,
+    "N_valid_cov": int,
+    "percent_modified": float,
+    "N_mod": int,
+    "N_canonical": int,
+    "N_other_mod": int,
+    "N_delete": int,
+    "N_fail": int,
+    "N_diff": int,
+    "N_nocall": int,
+}
 
 
 # def check_dir_availability(path_to_dir_with_bed_files):
@@ -18,64 +41,41 @@ ALLOWED_METHYLATION_TYPES = ["21839", "m", "h", "a"]
 #         return
 
 
-def read_bed_file(bed_file):
+def parse_bed_file(bed_file):
     """
     Check structure of bedmethyl file
     :param bed_file:
     :return:
     """
-    try:
-        bed_df = pd.read_csv(bed_file, sep="\t", header=None, engine="pyarrow")
-        return bed_df, True
-    except Exception as e:
-        print(f"Could not load BED file: {e}")
-        return None, False
+    bed_df_part1 = pd.read_csv(bed_file, sep="\t", header=None, engine="pyarrow")
+    if bed_df_part1.shape[1] != 10:
+        print("Invalid number of tab-separated columns in BedMethyl file. Please check the file.")
+        return None
+    else:
+        bed_df_part2 = bed_df_part1[9].str.split(" ", expand=True)
+        if bed_df_part2.shape[1] != 9:
+            print("Invalid number of space-separated columns in BedMethyl file. Please check the file.")
+            return None
+        else:
+            bed_df = pd.concat([bed_df_part1, bed_df_part2], axis=1).drop(9, axis=1)
+            bed_df.columns = list(BED_STRUCTURE.keys())
+            bed_df = bed_df.astype(BED_STRUCTURE)
 
+            # Allowed methylations
+            for methylation_type in bed_df["modified_base_code"].unique():
+                if methylation_type not in METHYLATIONS_KEY:
+                    print(f"Methylation {methylation_type} is not supported. Please check the file.")
+                    return None
+            bed_df["modified_base_code"] = bed_df["modified_base_code"].replace(METHYLATIONS_KEY)
 
-def has_valid_structure(bed_df):
+            # Strand
+            for strand in bed_df["strand"].unique():
+                if strand not in ("+", "-", "."):
+                    print(
+                        f"BedMethyl file must contain strand information '+', '-' or '.' in column 6."
+                        f" Please check the file.")
+                    return None
 
-    # Correct number of columns
-    if not bed_df.shape[1] == 10:
-        print("BedMethyl file does not have 10 columns. Please check the file.")
-        return False
-
-    # Strings - 0: contig, 3: methylation type, 9: statistics
-    for col_index in (0, 3, 9):
-        if not pd.api.types.is_string_dtype(bed_df[col_index].dtype):
-            print(f"BedMethyl file must contain strings in column {col_index + 1}. Please check the file.")
-            return False
-
-    # Allowed methylations
-    for methylation_type in bed_df[3].unique():
-        if methylation_type not in ALLOWED_METHYLATION_TYPES:
-            print(f"Methylation {methylation_type} is not supported. Please check the file.")
-            return False
-
-    # Integers - 1: index, 2: position, 4: coverage
-    for col_index in (1, 2, 4):
-        if not pd.api.types.is_integer_dtype(bed_df[col_index].dtype):
-            print(f"BedMethyl file must contain integers in column {col_index + 1}. Please check the file.")
-            return False
-
-    # Strand
-    for strand in bed_df[5].unique():
-        if strand not in ("+", "-"):
-            print(f"BedMethyl file must contain strand information '+' or '-' in column 6. Please check the file.")
-            return False
-
-    # Statistics
-    if not bed_df[9].apply(lambda x: len(x.split()) == 9).all():
-        print("Each value in column 10 must contain exactly 9 parts separated by spaces.")
-        return False
-
-    return True
-
-
-def load_bed_file(file_path):
-    bed_df, is_valid = read_bed_file(file_path)
-    if is_valid:
-        if has_valid_structure(bed_df):
-            return bed_df
-            # return bed_df[[0, 1, 2, 3, 4, 5, 9]] # proto to nefunguje!!!!
-
-    return None
+    # bed_df = pd.read_csv(bed_file, sep="\\s+", header=None)
+    # if not pd.api.types.is_string_dtype(bed_df[col_index].dtype):
+    return bed_df
