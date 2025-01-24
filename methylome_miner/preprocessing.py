@@ -1,9 +1,7 @@
 """
 Pre-process bedmethyle file
 """
-import glob
 import json
-import os
 import statistics
 from pathlib import Path
 
@@ -12,11 +10,11 @@ import pandas as pd
 from loading import parse_bed_file
 
 
-def calculate_med_coverage(path_to_dir_with_bed_files):
+def calculate_med_coverage(bed_dir_path):
     """
     Calculate median coverage for all analyzed samples
     """
-    bed_files = glob.glob(os.path.join(path_to_dir_with_bed_files, '*.bed'))
+    bed_files = list(Path(bed_dir_path).glob("*.bed"))
     medians = []
     for bed_file in bed_files:
         bed_df_part1 = pd.read_csv(bed_file, sep='\t', header=None, engine="pyarrow")
@@ -24,75 +22,67 @@ def calculate_med_coverage(path_to_dir_with_bed_files):
     return round(statistics.median(medians))
 
 
-def get_list_of_methylated_position(file_path, path_to_dir_with_bed_files, strand, file_name, min_percent_modified=90, min_coverage=None):
-    """
-    Get list of filtred methylated positions
-    :param file_path:
-    :param min_percent_modified:
-    :param strand:
-    :param file_name:
-    :param min_coverage:
-    :return:
-    """
+def get_list_of_methylated_position(bed_file_path, bed_dir_path,
+                                    write_to_file=True, output_file_name=None, file_format="json",
+                                    min_coverage=None, min_percent_modified=90, strand=None):
 
-    processed_bed_df = parse_bed_file(file_path)
+    bed_df = parse_bed_file(bed_file_path)
 
     if min_coverage is None:
-        min_coverage = calculate_med_coverage(path_to_dir_with_bed_files)
+        min_coverage = calculate_med_coverage(bed_dir_path)
         print(f"Minimum coverage for methylated position: {min_coverage}")
 
-    if isinstance(min_percent_modified, (int, float)):
-        if min_percent_modified < 0 or min_percent_modified > 100:
-            print("Invalid input, min_percent_modified must be between 0 and 100.")
-            return
+    if min_percent_modified < 0 or min_percent_modified > 100:
+        print("Invalid input, min_percent_modified must be between 0 and 100.")
+        return None
 
-    strand_condition = True if strand is None else (processed_bed_df['strand'] == strand)
+    strand_condition = True if strand is None else (bed_df["strand"] == strand)
 
-    condition = (processed_bed_df['score'] >= min_coverage) & (
-                processed_bed_df['percent_modified'] >= min_percent_modified) & strand_condition
+    df_filter = ((bed_df["score"] >= min_coverage) & (bed_df["percent_modified"] >= min_percent_modified)
+                 & strand_condition)
 
-    selected = processed_bed_df[condition]
+    bed_df_filtered = bed_df[df_filter]
 
-    if selected.empty:
-        print("No methylated positions found with the specified conditions.")
-        return
-
-    filename = file_name.split('.')[0]
-    output_csv_path = os.path.join(output_dir, f"{filename}_filtered.csv")
-    output_json_path = os.path.join(output_dir2, f'{filename}_methylated_positions.json')
-
-    selected.to_csv(output_csv_path, index=False, sep='\t')
-
-    methylated_positions = selected.groupby(['contig', 'methylation type', 'strand'])['index'].apply(list).to_dict()
+    methylated_positions = bed_df_filtered.groupby(['reference_seq', 'modified_base_code', 'strand'])['start_index'].apply(
+        list).to_dict()
     methylated_positions_str_keys = {str(key): value for key, value in methylated_positions.items()}
 
-    with open(output_json_path, 'w') as json_file:
-        json.dump(methylated_positions_str_keys, json_file, indent=4)
+    if bed_df_filtered.empty:
+        print("No methylated positions found with the specified conditions.")
+        return None
+    else:
+        if write_to_file:
+            if output_file_name is None:
+                output_file_name = Path.cwd() / (bed_file_path.stem + "_filtered")
+            # write_bed_file(bed_df_filtered, output_file_name=output_file_name, file_format=file_format)
+            write_bed_file(methylated_positions_str_keys, output_file_name=output_file_name, file_format=file_format)
 
-    return methylated_positions, strand
+        return bed_df_filtered
+
+
+def write_bed_file(bed_df, output_file_name, file_format="json"):
+    output_file_path = output_file_name.with_suffix("." + file_format)
+
+    match file_format:
+        case "json":
+            with open(output_file_path, 'w') as json_file:
+                json.dump(bed_df, json_file, indent=4)
+
+        case "csv":
+            bed_df.to_csv(output_file_path, index=False)
+        case "tsv":
+            bed_df.to_csv(output_file_path, index=False, sep="\t")
+        case "bed":
+            print("To be implemented.")
+        case _:
+            print("Unsupported file format. Choose from: json, csv, tsv or bed.")
 
 
 if __name__ == "__main__":
-    file = Path("input_bed_files/KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed")
-    df = load_bed_file(file)
-    dir_with_bed_files = Path("input_bed_files")
-    # min_coverage_for_filtering = calculate_med_coverage(dir_with_bed_files)
+    # file = Path("input_bed_files/KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed")
+    # df = parse_bed_file(file)
 
-    # output_dir = r'output/csv_files'
-    # output_dir2 = r'output/json_files'
-    # os.makedirs(output_dir, exist_ok=True)
-    # os.makedirs(output_dir2, exist_ok=True)
+    bed_files_dir = Path("input_bed_files")
 
-    for file_name in os.listdir(dir_with_bed_files):
-        if file_name.endswith('.bed'):
-
-            full_file_path_to_bed = os.path.join(dir_with_bed_files, file_name)
-
-            methylated_positions, strand = get_list_of_methylated_position(
-                full_file_path_to_bed,
-                dir_with_bed_files,
-                min_percent_modified=90,
-                min_coverage=37,
-                strand=None,
-                file_name=file_name
-            )
+    for bed_file_path in Path(bed_files_dir).glob("*.bed"):
+        methylated_positions = get_list_of_methylated_position(bed_file_path, bed_files_dir, min_coverage=37)

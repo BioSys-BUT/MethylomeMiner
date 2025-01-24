@@ -41,13 +41,13 @@ BED_STRUCTURE = {
 #         return
 
 
-def parse_bed_file(bed_file):
+def parse_bed_file(bed_file_path):
     """
     Check structure of bedmethyl file
-    :param bed_file:
+    :param bed_file_path:
     :return:
     """
-    bed_df_part1 = pd.read_csv(bed_file, sep="\t", header=None, engine="pyarrow")
+    bed_df_part1 = pd.read_csv(bed_file_path, sep="\t", header=None, engine="pyarrow")
     if bed_df_part1.shape[1] != 10:
         print("Invalid number of tab-separated columns in BedMethyl file. Please check the file.")
         return None
