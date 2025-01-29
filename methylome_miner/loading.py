@@ -6,6 +6,7 @@ Move all checks of datatypes here
 Test try-except in read_bed_file
 Is dir with all bed files necessary?
 """
+import time
 from io import StringIO
 from pathlib import Path
 
@@ -20,24 +21,24 @@ METHYLATIONS_KEY = {"21839": "4mC", "m": "5mC", "h": "5hmCG", "a": "6mA"}
 
 # Needs optimization of data types
 BED_STRUCTURE = {
-    "reference_seq": str,
-    "start_index": int,
-    "end_index": int,
-    "modified_base_code": str,
-    "score": int,
-    "strand": str,
-    "start_position": int,
-    "end_position": int,
+    "reference_seq": "category",
+    "start_index": "int32",
+    "end_index": "int32",
+    "modified_base_code": "category",
+    "score": "int16",
+    "strand": "category",
+    "start_position": "int32",
+    "end_position": "int32",
     "color": str,
-    "N_valid_cov": int,
-    "percent_modified": float,
-    "N_mod": int,
-    "N_canonical": int,
-    "N_other_mod": int,
-    "N_delete": int,
-    "N_fail": int,
-    "N_diff": int,
-    "N_nocall": int,
+    "N_valid_cov": "int16",
+    "percent_modified": "float16",
+    "N_mod": "int16",
+    "N_canonical": "int16",
+    "N_other_mod": "int16",
+    "N_delete": "int16",
+    "N_fail": "int16",
+    "N_diff": "int16",
+    "N_nocall": "int16",
 }
 
 
@@ -59,7 +60,8 @@ def parse_bed_file(bed_file_path):
         print("Invalid number of tab-separated columns in BedMethyl file. Please check the file.")
         return None
     else:
-        bed_df_part2 = bed_df_part1[9].str.split(" ", expand=True)
+        bed_df_part2_str = StringIO(bed_df_part1[9].str.cat(sep="\n"))
+        bed_df_part2 = pd.read_csv(bed_df_part2_str, sep=" ", header=None, engine="pyarrow")
         if bed_df_part2.shape[1] != 9:
             print("Invalid number of space-separated columns in BedMethyl file. Please check the file.")
             return None
@@ -67,24 +69,15 @@ def parse_bed_file(bed_file_path):
             bed_df = pd.concat([bed_df_part1, bed_df_part2], axis=1).drop(9, axis=1)
             bed_df.columns = list(BED_STRUCTURE.keys())
             bed_df = bed_df.astype(BED_STRUCTURE)
-
-            # Allowed methylations
-            for methylation_type in bed_df["modified_base_code"].unique():
-                if methylation_type not in METHYLATIONS_KEY:
-                    print(f"Methylation {methylation_type} is not supported. Please check the file.")
-                    return None
-            bed_df["modified_base_code"] = bed_df["modified_base_code"].replace(METHYLATIONS_KEY)
+            bed_df["modified_base_code"] = bed_df["modified_base_code"].cat.rename_categories(METHYLATIONS_KEY)
 
             # Strand
-            for strand in bed_df["strand"].unique():
+            for strand in bed_df["strand"].cat.categories:
                 if strand not in ("+", "-", "."):
                     print(
                         f"BedMethyl file must contain strand information '+', '-' or '.' in column 6."
                         f" Please check the file.")
                     return None
-
-    # bed_df = pd.read_csv(bed_file, sep="\\s+", header=None)
-    # if not pd.api.types.is_string_dtype(bed_df[col_index].dtype):
     return bed_df
 
 
@@ -138,12 +131,15 @@ def check_and_fix_gff(gff_file):
 
 
 if __name__ == "__main__":
-    file1 = Path("D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\gff_data_uncorrected\KP1622_genome.gff")
-    file2 = Path("D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\genbank_data\KP1622_genome.gbk")
-    cds1 = parse_annotation_file(file1)
-    cds2 = parse_annotation_file(file2)
+    start_time = time.time()
+    bed_df1 = parse_bed_file(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
+    print(f"Time bed_df: {time.time() - start_time} s.")
+    # file1 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\gff_data_uncorrected\KP1622_genome.gff")
+    # file2 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\genbank_data\KP1622_genome.gbk")
+    # cds1 = parse_annotation_file(file1)
+    # cds2 = parse_annotation_file(file2)
     # cds3 = process_annotation_file(str(file1))
     # cds4 = process_annotation_file(str(file2))
-    file3 = Path("D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP1344_genome.gff")
-    cds3 = parse_annotation_file(file3)
+    # file3 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP1344_genome.gff")
+    # cds3 = parse_annotation_file(file3)
     print("Done.")
