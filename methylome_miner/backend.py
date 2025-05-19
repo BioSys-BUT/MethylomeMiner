@@ -1,10 +1,117 @@
 import json
-
 from pathlib import Path
 
 import pandas as pd
 
 from loading import parse_annotation_file
+from preprocessing import get_list_of_methylated_positions
+
+import time
+
+
+def sort_coding_non_coding_methylations(bed_df, annot_df):
+    bed_df = bed_df.reset_index(drop=True)
+
+    coding_parts = []
+    non_coding_parts = []
+    next_methylation_search_idx = 0
+
+    start = time.time()
+
+    for idx, annot in enumerate(annot_df.itertuples(index=False)):
+
+        if idx == 0:
+            non_coding_part = bed_df.loc[lambda df: df["start_index"] < annot.start]
+            if not non_coding_part.empty:
+                non_coding_part["prev_gene_reference_seq"] = ""
+                non_coding_part["prev_gene_id"] = ""
+                non_coding_part["prev_gene_start"] = ""
+                non_coding_part["prev_gene_end"] = ""
+                non_coding_part["prev_gene_strand"] = ""
+                non_coding_part["prev_gene_product"] = ""
+
+                non_coding_part["next_gene_reference_seq"] = annot.record_id
+                non_coding_part["next_gene_id"] = annot.gene_id
+                non_coding_part["next_gene_start"] = annot.start
+                non_coding_part["next_gene_end"] = annot.end
+                non_coding_part["next_gene_strand"] = annot.strand
+                non_coding_part["next_gene_product"] = annot.product
+
+                non_coding_parts.append(non_coding_part)
+
+        elif idx == annot_df.shape[0]:
+            non_coding_part = bed_df.loc[lambda df: df["start_index"] > annot.start]
+
+            if not non_coding_part.empty:
+                non_coding_part["prev_gene_reference_seq"] = prev_annot.record_id
+                non_coding_part["prev_gene_id"] = prev_annot.gene_id
+                non_coding_part["prev_gene_start"] = prev_annot.start
+                non_coding_part["prev_gene_end"] = prev_annot.end
+                non_coding_part["prev_gene_strand"] = prev_annot.strand
+                non_coding_part["prev_gene_product"] = prev_annot.product
+
+                non_coding_part["next_gene_reference_seq"] = ""
+                non_coding_part["next_gene_id"] = ""
+                non_coding_part["next_gene_start"] = ""
+                non_coding_part["next_gene_end"] = ""
+                non_coding_part["next_gene_strand"] = ""
+                non_coding_part["next_gene_product"] = ""
+
+                non_coding_parts.append(non_coding_part)
+
+        bed_slice = bed_df.iloc[next_methylation_search_idx:, ]
+
+        coding_part = (
+            bed_slice
+            .loc[lambda df: df["start_index"] <= annot.end]
+            .loc[lambda df: annot.start <= df["start_index"]]
+            .loc[lambda df: df["strand"] == annot.strand]
+            .loc[lambda df: df["reference_seq"] == annot.record_id]
+        ).copy()
+
+        if coding_part.index.min() - next_methylation_search_idx > 1 and idx != 0:
+            non_coding_part = bed_slice.iloc[next_methylation_search_idx:coding_part.index.min()]
+            non_coding_part = (
+                non_coding_part.loc[lambda df: df["strand"] == annot.strand].loc[lambda df: df["reference_seq"] == annot.record_id]
+            )
+            if not non_coding_part.empty:
+
+                non_coding_part["prev_gene_reference_seq"] = prev_annot.record_id
+                non_coding_part["prev_gene_id"] = prev_annot.gene_id
+                non_coding_part["prev_gene_start"] = prev_annot.start
+                non_coding_part["prev_gene_end"] = prev_annot.end
+                non_coding_part["prev_gene_strand"] = prev_annot.strand
+                non_coding_part["prev_gene_product"] = prev_annot.product
+
+                non_coding_part["next_gene_reference_seq"] = annot.record_id
+                non_coding_part["next_gene_id"] = annot.gene_id
+                non_coding_part["next_gene_start"] = annot.start
+                non_coding_part["next_gene_end"] = annot.end
+                non_coding_part["next_gene_strand"] = annot.strand
+                non_coding_part["next_gene_product"] = annot.product
+
+                non_coding_parts.append(non_coding_part)
+
+        if not coding_part.empty:
+            coding_part["gene_reference_seq"] = annot.record_id
+            coding_part["gene_id"] = annot.gene_id
+            coding_part["gene_start"] = annot.start
+            coding_part["gene_end"] = annot.end
+            coding_part["gene_strand"] = annot.strand
+            coding_part["gene_product"] = annot.product
+
+            coding_parts.append(coding_part)
+            next_methylation_search_idx = coding_part.index.max() + 1
+
+        prev_annot = annot
+
+    coding_df = pd.concat(coding_parts)
+    non_coding_df = pd.concat(non_coding_parts)
+
+    end = time.time()
+    print(end - start)
+
+    return coding_df, non_coding_df
 
 
 def get_list_of_methylated_genes(data_frame, strand, list_of_methylated_positions):
@@ -119,23 +226,44 @@ def pair_json_with_annotation(json_dir, annotation_dir):
 
 
 if __name__ == "__main__":
+    json_files_dir = Path.cwd()
+
+    # for bed_file_path in Path(json_files_dir).glob("*.json"):
+    #     print(bed_file_path)
+    #     bed_df1 = pd.read_json(bed_file_path)
+    #     counts = bed_df1["modified_base_code"].value_counts()
+    #     print(counts)
+
+    csv_files_dir = Path("outputs") / "coding_and_noncoding"
+    for coding_file in Path(csv_files_dir).glob("*_coding.csv"):
+        # print(coding_file)
+        bed_df1 = pd.read_csv(coding_file, sep="\t", header=0)
+        counts = bed_df1["methylation_type"].value_counts()
+        # print(counts)
+
+
+    # bed_df1 = get_list_of_methylated_positions(Path(r"input_bed_files/KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"), Path("input_bed_files"))
+    bed_df1 = pd.read_json(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore_filtered2.json"))
+    annot_df1 = parse_annotation_file(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP825_genome.gff"))
+    coding_df = get_methylations_in_genes(bed_df1, annot_df1)
+
     # file = Path("D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP825_genome.gff")
     # annot = parse_annotation_file(file)
-    methylation_dir = Path.cwd()
-    # annotation_dir = Path.cwd() / "input_roary_output_files_corrected"
-    annotation_dir = Path.cwd() / "gbk_gff_data" / "gff_data_uncorrected"
-    paired_files = pair_json_with_annotation(methylation_dir, annotation_dir)
-    df_cds_info = []
-    for files in paired_files:
-        with open(files[1]) as json_file:
-            methylated_positions_str = json.load(json_file)
-        methylated_positions = {eval(key): value for key, value in methylated_positions_str.items()}
-        # print(files[2])
-        df_cds_info = parse_annotation_file(files[2])
-
-        df_cds_info_leading = df_cds_info[df_cds_info["strand"] == "+"]
-        methylated_positions_leading = {key: values for key, values in methylated_positions.items() if key[2] == '+'}
-        df_grouped_leading, df_missing_methylation_leading = get_list_of_methylated_genes(df_cds_info_leading, '+', methylated_positions_leading)
+    # methylation_dir = Path.cwd()
+    # # annotation_dir = Path.cwd() / "input_roary_output_files_corrected"
+    # annotation_dir = Path.cwd() / "gbk_gff_data" / "gff_data_uncorrected"
+    # paired_files = pair_json_with_annotation(methylation_dir, annotation_dir)
+    # df_cds_info = []
+    # for files in paired_files:
+    #     with open(files[1]) as json_file:
+    #         methylated_positions_str = json.load(json_file)
+    #     methylated_positions = {eval(key): value for key, value in methylated_positions_str.items()}
+    #     # print(files[2])
+    #     df_cds_info = parse_annotation_file(files[2])
+    #
+    #     df_cds_info_leading = df_cds_info[df_cds_info["strand"] == "+"]
+    #     methylated_positions_leading = {key: values for key, values in methylated_positions.items() if key[2] == '+'}
+    #     df_grouped_leading, df_missing_methylation_leading = get_list_of_methylated_genes(df_cds_info_leading, '+', methylated_positions_leading)
 
         # df_cds_info_complement = df_cds_info[df_cds_info['strand'] == '-']
         # methylated_positions_complement = {key: values for key, values in methylated_positions.items() if key[2] == '-'}
