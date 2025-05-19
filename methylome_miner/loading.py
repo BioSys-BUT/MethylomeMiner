@@ -25,7 +25,7 @@ BED_STRUCTURE = {
     "start_index": "int32",
     "end_index": "int32",
     "modified_base_code": "category",
-    "score": "int16",
+    "score": "int16",  # coverage
     "strand": "category",
     "start_position": "int32",
     "end_position": "int32",
@@ -41,6 +41,15 @@ BED_STRUCTURE = {
     "N_nocall": "int16",
 }
 
+ANNOTATION_STRUCTURE = {
+    "record_id": "category",
+    "gene_id": str,
+    "start": "int32",
+    "end": "int32",
+    "strand": "category",
+    "product": str,
+    "note": str
+}
 
 # def check_dir_availability(path_to_dir_with_bed_files):
 #     # for get_list_of_methylated_positions resp. calculate_med_coverage
@@ -83,6 +92,8 @@ def parse_bed_file(bed_file_path):
 
 def parse_annotation_file(annotation_file_path):
     # Are custom qualifiers set to the right value? locus_tag is in both
+    # TODO: Add check that annotation file is sorted by positions of genes, or sorted it automatically
+    # (because of methylation before the first gene and after the last one)
     with open(annotation_file_path) as annot_file:
         match annotation_file_path.suffix:
             case ".gbk":
@@ -100,7 +111,7 @@ def parse_annotation_file(annotation_file_path):
         for feature in record.features:
             if feature.type == "CDS":
                 cds_data.append({
-                    "contig": record.id,
+                    "record_id": record.id,
                     "gene_id": feature.qualifiers[custom_qualifier][0],
                     "start": feature.location.start,
                     "end": feature.location.end,
@@ -108,15 +119,16 @@ def parse_annotation_file(annotation_file_path):
                     "product": feature.qualifiers["product"][0],
                     "note": feature.qualifiers["note"][0]
                 })
-
-    return pd.DataFrame(cds_data)
+    cds_df = pd.DataFrame(cds_data)
+    # cds_df = cds_df.astype(ANNOTATION_STRUCTURE)
+    return cds_df
 
 
 def check_and_fix_gff(gff_file):
     fixed_lines = []
     for line_number, line in enumerate(gff_file, start=1):
         if "<1" in line:
-            fixed_line = line.replace("<1", "1") # before line.replace("<1","0")
+            fixed_line = line.replace("<1", "1")  # before line.replace("<1","0")
             fixed_lines.append(fixed_line)
             print(f"Line {line_number}: Replaced '<1' with '1'")
         else:
@@ -132,7 +144,7 @@ def check_and_fix_gff(gff_file):
 
 if __name__ == "__main__":
     start_time = time.time()
-    bed_df1 = parse_bed_file(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
+    bed_df1 = parse_bed_file_parallel(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
     print(f"Time bed_df: {time.time() - start_time} s.")
     # file1 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\gff_data_uncorrected\KP1622_genome.gff")
     # file2 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\genbank_data\KP1622_genome.gbk")
