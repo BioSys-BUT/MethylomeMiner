@@ -15,8 +15,6 @@ import pandas as pd
 from BCBio import GFF
 from Bio import SeqIO
 
-# from mm_analysis_of_coding_and_noncoding_regions_server import process_annotation_file
-
 METHYLATIONS_KEY = {"21839": "4mC", "m": "5mC", "h": "5hmCG", "a": "6mA"}
 
 # Needs optimization of data types
@@ -120,7 +118,7 @@ def parse_annotation_file(annotation_file_path):
                     "note": feature.qualifiers["note"][0]
                 })
     cds_df = pd.DataFrame(cds_data)
-    # cds_df = cds_df.astype(ANNOTATION_STRUCTURE)
+    cds_df = cds_df.astype(ANNOTATION_STRUCTURE)
     return cds_df
 
 
@@ -136,22 +134,9 @@ def check_and_fix_gff(gff_file):
 
     fixed_lines_str = "".join(fixed_lines)
     return StringIO(fixed_lines_str)
-        # fixed_gff_file = f"{os.path.basename(gff_file).split(".")[0]}_fixed.gff"
-        # with open(fixed_gff_file, 'w') as file:
-        #     file.writelines(fixed_lines)
-        # return fixed_gff_file
 
 
 if __name__ == "__main__":
     start_time = time.time()
-    bed_df1 = parse_bed_file_parallel(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
+    bed_df1 = parse_bed_file(Path(r"input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
     print(f"Time bed_df: {time.time() - start_time} s.")
-    # file1 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\gff_data_uncorrected\KP1622_genome.gff")
-    # file2 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\gbk_gff_data\genbank_data\KP1622_genome.gbk")
-    # cds1 = parse_annotation_file(file1)
-    # cds2 = parse_annotation_file(file2)
-    # cds3 = process_annotation_file(str(file1))
-    # cds4 = process_annotation_file(str(file2))
-    # file3 = Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP1344_genome.gff")
-    # cds3 = parse_annotation_file(file3)
-    print("Done.")

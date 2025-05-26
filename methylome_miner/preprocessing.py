@@ -1,7 +1,6 @@
 """
 Pre-process bedmethyle file
 """
-import json
 import statistics
 from pathlib import Path
 
@@ -22,7 +21,7 @@ def calculate_med_coverage(bed_dir_path):
     return round(statistics.median(medians))
 
 
-def get_list_of_methylated_position(bed_file_path, bed_dir_path,
+def get_list_of_methylated_positions(bed_file_path, bed_dir_path,
                                     write_to_file=True, output_file_name=None, file_format="json",
                                     min_coverage=None, min_percent_modified=90, strand=None):
 
@@ -43,19 +42,14 @@ def get_list_of_methylated_position(bed_file_path, bed_dir_path,
 
     bed_df_filtered = bed_df[df_filter]
 
-    methylated_positions = bed_df_filtered.groupby(['reference_seq', 'modified_base_code', 'strand'])['start_index'].apply(
-        list).to_dict()
-    methylated_positions_str_keys = {str(key): value for key, value in methylated_positions.items()}
-
     if bed_df_filtered.empty:
         print("No methylated positions found with the specified conditions.")
         return None
     else:
         if write_to_file:
             if output_file_name is None:
-                output_file_name = Path.cwd() / (bed_file_path.stem + "_filtered")
-            # write_bed_file(bed_df_filtered, output_file_name=output_file_name, file_format=file_format)
-            write_bed_file(methylated_positions_str_keys, output_file_name=output_file_name, file_format=file_format)
+                output_file_name = Path.cwd() / (bed_file_path.stem + "_filtered2")
+            write_bed_file(bed_df_filtered, output_file_name=output_file_name, file_format=file_format)
 
         return bed_df_filtered
 
@@ -65,9 +59,7 @@ def write_bed_file(bed_df, output_file_name, file_format="json"):
 
     match file_format:
         case "json":
-            with open(output_file_path, 'w') as json_file:
-                json.dump(bed_df, json_file, indent=4)
-
+            pd.DataFrame.to_json(bed_df, output_file_path)
         case "csv":
             bed_df.to_csv(output_file_path, index=False)
         case "tsv":
@@ -85,4 +77,4 @@ if __name__ == "__main__":
     bed_files_dir = Path("input_bed_files")
 
     for bed_file_path in Path(bed_files_dir).glob("*.bed"):
-        methylated_positions = get_list_of_methylated_position(bed_file_path, bed_files_dir, min_coverage=37)
+        methylated_positions = get_list_of_methylated_positions(bed_file_path, bed_files_dir, min_coverage=37)

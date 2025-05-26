@@ -1,16 +1,13 @@
-import json
 from pathlib import Path
 
 import pandas as pd
 
 from loading import parse_annotation_file
-from preprocessing import get_list_of_methylated_positions
 
 import time
 
-# TODO: Move add annotation to new function
 
-def sort_coding_non_coding_methylations(bed_df, annot_df):
+def sort_coding_non_coding_methylations(bed_df, annot_df, all_coding=False):
     bed_df = bed_df.reset_index(drop=True)
 
     coding_parts = []
@@ -22,14 +19,7 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
 
     for idx, annot in enumerate(annot_df.itertuples(index=False)):
 
-        if idx == 0:
-            non_coding_part = bed_df.loc[lambda df: df["start_index"] < annot.start].copy()
-            if not non_coding_part.empty:
-                # non_coding_part = add_annot_to_non_coding(non_coding_part, "", annot, "start")
-                next_methylation_search_idx = non_coding_part.index.max() + 1
-                non_coding_parts.append(non_coding_part)
-
-        bed_slice = bed_df.iloc[next_methylation_search_idx:, ]
+        bed_slice = bed_df.iloc[next_methylation_search_idx:]
 
         coding_part = (
             bed_slice
@@ -39,37 +29,37 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
             .loc[lambda df: df["reference_seq"] == annot.record_id]
         ).copy()
 
-        if coding_part.index.min() - next_methylation_search_idx >= 1:
-            if idx != 0:
-                non_coding_part = bed_df.iloc[next_methylation_search_idx:coding_part.index.min()].copy()
-                if not non_coding_part.empty:
-                    # non_coding_part = add_annot_to_non_coding(non_coding_part, prev_annot, annot)
-                    next_methylation_search_idx = non_coding_part.index.max() + 1
-                    non_coding_parts.append(non_coding_part)
+        coding_start_index = coding_part.index.min() if not coding_part.empty else bed_slice.index.min()
 
-            elif idx == annot_df.shape[0] - 1:
-                if not coding_part.empty:
-                    non_coding_part = bed_df.loc[coding_part.index.max() + 1:].copy()
-                else:
-                    non_coding_part = bed_df.loc[next_methylation_search_idx:].copy()
-                if not non_coding_part.empty:
-                    # non_coding_part = add_annot_to_non_coding(non_coding_part, prev_annot, annot, "end")
-                    non_coding_parts.append(non_coding_part)
+        if idx == 0:
+            non_coding_part = bed_df.loc[lambda df: df["start_index"] < annot.start].copy()
+            if not non_coding_part.empty:
+                non_coding_part = add_annot_to_non_coding(non_coding_part, "", annot, "start")
+                next_methylation_search_idx = non_coding_part.index.max() + 1
+                non_coding_parts.append(non_coding_part)
+
+        elif coding_start_index > next_methylation_search_idx:
+            non_coding_part = bed_df.iloc[next_methylation_search_idx:coding_start_index].copy()
+            if not non_coding_part.empty:
+                non_coding_part = add_annot_to_non_coding(non_coding_part, prev_annot, annot)
+                next_methylation_search_idx = non_coding_part.index.max() + 1
+                non_coding_parts.append(non_coding_part)
 
         if idx == annot_df.shape[0] - 1:
-            if not coding_part.empty:
-                non_coding_part = bed_df.loc[coding_part.index.max() + 1:].copy()
-            else:
-                non_coding_part = bed_df.loc[next_methylation_search_idx:].copy()
+            tail_start_idx = coding_part.index.max() + 1 if not coding_part.empty else next_methylation_search_idx
+            non_coding_part = bed_df.loc[tail_start_idx:].copy()
             if not non_coding_part.empty:
-                # non_coding_part = add_annot_to_non_coding(non_coding_part, prev_annot, annot, "end")
+                non_coding_part = add_annot_to_non_coding(non_coding_part, prev_annot, annot, "end")
                 non_coding_parts.append(non_coding_part)
 
         if not coding_part.empty:
             new_annot_parts.append(add_coding_to_annot(annot, coding_part))
+            coding_part = add_annot_to_coding(coding_part, annot)
             coding_parts.append(coding_part)
 
             next_methylation_search_idx = coding_part.index.max() + 1
+        elif all_coding:
+            new_annot_parts.append(add_coding_to_annot(annot))
 
         prev_annot = annot
 
@@ -78,7 +68,7 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
     new_annot_df = pd.concat(new_annot_parts)
 
     end = time.time()
-    print(end - start)
+    # print(end - start)
 
     # all_df = pd.concat([coding_df, non_coding_df])
     # all_df = all_df.sort_values(["reference_seq", "start_index"])
@@ -87,53 +77,32 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
     return coding_df, non_coding_df, new_annot_df
 
 
+def fill_annot(df, prefix, annot):
+    if annot:
+        df[f"{prefix}_gene_reference_seq"] = annot.record_id
+        df[f"{prefix}_gene_id"] = annot.gene_id
+        df[f"{prefix}_gene_start"] = annot.start
+        df[f"{prefix}_gene_end"] = annot.end
+        df[f"{prefix}_gene_strand"] = annot.strand
+        df[f"{prefix}_gene_product"] = annot.product
+    else:
+        for col in ["reference_seq", "id", "start", "end", "strand", "product"]:
+            df[f"{prefix}_gene_{col}"] = ""
+    return df
+
+
 def add_annot_to_non_coding(non_coding_df, prev_annot, next_annot, annot_position="middle"):
 
     match annot_position:
         case "start":
-            non_coding_df["prev_gene_reference_seq"] = ""
-            non_coding_df["prev_gene_id"] = ""
-            non_coding_df["prev_gene_start"] = ""
-            non_coding_df["prev_gene_end"] = ""
-            non_coding_df["prev_gene_strand"] = ""
-            non_coding_df["prev_gene_product"] = ""
-
-            non_coding_df["next_gene_reference_seq"] = next_annot.record_id
-            non_coding_df["next_gene_id"] = next_annot.gene_id
-            non_coding_df["next_gene_start"] = next_annot.start
-            non_coding_df["next_gene_end"] = next_annot.end
-            non_coding_df["next_gene_strand"] = next_annot.strand
-            non_coding_df["next_gene_product"] = next_annot.product
-
+            fill_annot(non_coding_df, "prev", None)
+            fill_annot(non_coding_df, "next", next_annot)
         case "middle":
-            non_coding_df["prev_gene_reference_seq"] = prev_annot.record_id
-            non_coding_df["prev_gene_id"] = prev_annot.gene_id
-            non_coding_df["prev_gene_start"] = prev_annot.start
-            non_coding_df["prev_gene_end"] = prev_annot.end
-            non_coding_df["prev_gene_strand"] = prev_annot.strand
-            non_coding_df["prev_gene_product"] = prev_annot.product
-
-            non_coding_df["next_gene_reference_seq"] = next_annot.record_id
-            non_coding_df["next_gene_id"] = next_annot.gene_id
-            non_coding_df["next_gene_start"] = next_annot.start
-            non_coding_df["next_gene_end"] = next_annot.end
-            non_coding_df["next_gene_strand"] = next_annot.strand
-            non_coding_df["next_gene_product"] = next_annot.product
-
+            fill_annot(non_coding_df, "prev", prev_annot)
+            fill_annot(non_coding_df, "next", next_annot)
         case "end":
-            non_coding_df["prev_gene_reference_seq"] = prev_annot.record_id
-            non_coding_df["prev_gene_id"] = prev_annot.gene_id
-            non_coding_df["prev_gene_start"] = prev_annot.start
-            non_coding_df["prev_gene_end"] = prev_annot.end
-            non_coding_df["prev_gene_strand"] = prev_annot.strand
-            non_coding_df["prev_gene_product"] = prev_annot.product
-
-            non_coding_df["next_gene_reference_seq"] = ""
-            non_coding_df["next_gene_id"] = ""
-            non_coding_df["next_gene_start"] = ""
-            non_coding_df["next_gene_end"] = ""
-            non_coding_df["next_gene_strand"] = ""
-            non_coding_df["next_gene_product"] = ""
+            fill_annot(non_coding_df, "prev", prev_annot)
+            fill_annot(non_coding_df, "next", None)
 
     return non_coding_df
 
@@ -148,26 +117,27 @@ def add_annot_to_coding(coding_df, annot):
     return coding_df
 
 
-def add_coding_to_annot(annot, methylations_df):
-    new_annot_df = []
-    for group, methylations_group in methylations_df.groupby("modified_base_code"):
-        new_annot = pd.DataFrame([annot])
-        new_annot["modified_base_code"] = group
-        new_annot["positions"] = pd.Series(dtype="object")
-        new_annot.at[0, "positions"] = methylations_group["start_index"].values.tolist()
-        new_annot_df.append(new_annot)
-    return pd.concat(new_annot_df)
+def add_coding_to_annot(annot, methylations_df=None):
+    new_annot = pd.DataFrame([annot])
+    new_annot.columns = new_annot.columns[:7].union([cat[1:] for cat in new_annot.columns[7:]], sort=False)
+    if methylations_df is not None:
+        for group, methylations_group in methylations_df.groupby("modified_base_code", observed=False):
+            new_annot[group] = new_annot[group].astype("object")
+            new_annot.at[0, group] = methylations_group["start_index"].values.tolist()
+    return new_annot
 
 
 def sort_methylations(bed_df, annot_df):
 
-    bed_df_grouped = bed_df.groupby(["reference_seq", "strand"])
+    bed_df_grouped = bed_df.groupby(["reference_seq", "strand"], observed=False)
     annot_df_grouped = annot_df.groupby(["record_id", "strand"], observed=False)
     all_coding = []
     all_non_coding = []
     new_annots = []
+    methylation_types = ["m" + cat for cat in bed_df["modified_base_code"].astype("category").cat.categories]
     for group, bed_df_group in bed_df_grouped:
         annot_df_group = annot_df_grouped.get_group(group)
+        annot_df_group = pd.concat([annot_df_group, pd.DataFrame(columns=methylation_types, dtype="object")])
 
         coding_df, non_coding_df, new_annot_df = sort_coding_non_coding_methylations(bed_df_group, annot_df_group)
 
@@ -175,109 +145,25 @@ def sort_methylations(bed_df, annot_df):
         all_non_coding.append(non_coding_df)
         new_annots.append(new_annot_df)
 
-    all_coding_df = pd.concat(all_coding)
-    all_non_coding_df = pd.concat(all_non_coding)
-    all_df = pd.concat([all_coding_df, all_non_coding_df])
+    all_coding_df = pd.concat(all_coding).sort_values(by=["reference_seq", "start_index"])
+    all_non_coding_df = pd.concat(all_non_coding).sort_values(by=["reference_seq", "start_index"])
+    new_annot_df = pd.concat(new_annots).sort_values(by=["record_id", "start"])
+    # all_df = pd.concat([all_coding_df, all_non_coding_df])
+
     # all_df = all_df.sort_values(["reference_seq", "start_index"])
     # diff = pd.merge(bed_df, all_df.iloc[:, :18], how="outer", indicator=True)
-    return all_coding_df, all_non_coding_df
+    return all_coding_df, all_non_coding_df, new_annot_df
 
 
-def get_list_of_methylated_genes(data_frame, strand, list_of_methylated_positions):
+def write_df_to_file(methylations_df, file_name, file_type="csv"):
+    Path(file_name).parent.mkdir(parents=True, exist_ok=True)
 
-    rows = pd.DataFrame()
-    for contig_info, values in list_of_methylated_positions.items():
-        contig_name, methylation_type, meth_strand = contig_info
-        for value in values:
-            row = data_frame.loc[(data_frame["contig"] == contig_name) & (data_frame["start"] <= value) & (value <= data_frame["end"])]
-            if not row.empty:
-                rows = pd.concat([rows, pd.DataFrame(
-                      {"contig": contig_name, "gene_id": row["gene_id"], "start": row["start"], "end": row["end"], "position": value,
-                      "methylation_type": methylation_type, "strand": row["strand"], "product": row["product"]})])
+    match file_type:
+        case "csv":
+            methylations_df.to_csv(file_name, sep=";", index=False)
+        case "json":
+            methylations_df.to_json(file_name, indent=4)
 
-    if not rows.empty:
-        df = rows
-        df_grouped = df.groupby(['contig', "gene_id", 'start', 'end', 'methylation_type', 'strand', 'product']).agg(
-            count=('position', 'size'),
-            positions=('position', lambda x: ','.join(map(str, sorted(x))))
-        ).reset_index()
-
-        existing_positions = set(zip(df['position'], df['methylation_type'], df['contig'], df['strand']))
-    else:
-        df_grouped = pd.DataFrame(columns=['contig', 'gene_id', 'start', 'end', 'methylation_type', 'strand', 'product', 'count', 'positions'])
-        existing_positions = set()
-
-    # Převést list_of_methylated_positions na množinu
-    methylated_positions_set = set(
-        (value, key[1], key[0], key[2])
-        for key, values in list_of_methylated_positions.items()
-        for value in values
-    )
-
-    # Najít rozdíly mezi existing_positions a methylated_positions_set
-    missing_in_existing = methylated_positions_set - existing_positions
-
-    grouped = data_frame.groupby('contig')
-
-    # vytvorim skupiny dle jednotlivych contigu
-    grouped_missing = {}
-    for value, key, contig, orientation in missing_in_existing:
-        if contig not in grouped_missing:
-            grouped_missing[contig] = []
-        grouped_missing[contig].append((value, key, contig, orientation))
-
-    # v ramci contigu seradim od nejmensiho po nejvetsi
-    for contig in grouped_missing:
-        grouped_missing[contig] = sorted(grouped_missing[contig], key=lambda x: x[0])
-
-    previous_row = None
-    gene_near = []
-    for contig_name, group in grouped:
-        if contig_name not in grouped_missing:
-            continue
-        for value, key, contig, orientation in grouped_missing[contig_name]:
-            for row in group.itertuples():
-                if value < row.start and row.Index == group.index[0]:
-                    gene_near.append((contig, key, value, 'before first gene', 0, 0, "-", row.gene_id,
-                                      row.start, row.end, row.product, row.strand))
-                    break
-                elif value < row.start:
-                    gene_near.append((contig, key, value, previous_row.gene_id, previous_row.start, previous_row.end, previous_row.product,
-                                      row.gene_id, row.start, row.end, row.product, row.strand))
-                    break
-                elif row.Index == group.index[-1]:
-                    gene_near.append((contig, key, value, row.gene_id, row.start, row.end,  row.product,
-                                      "behind last gene", 0, 0, "-", row.strand))
-                    break
-                previous_row = row
-
-
-    df_missing_methylation = pd.DataFrame(gene_near, columns=[
-        "contig", "methylation", "position", "previous_gene_id", "previous_gene_start", "previous_gene_end", "previous_gene_product",
-        "next_gene_id", "next_gene_start", "next_gene_end", "next_gene_product", "strand"])
-
-    return df_grouped, df_missing_methylation
-
-def generate_coding_and_noncoding_outputs(df_grouped_leading, df_grouped_complement, df_missing_methylation_leading, df_missing_methylation_complement, strand, output_file_coding, output_file_non_coding):
-    if strand == None:
-        combined_df_coding = pd.concat([df_grouped_leading, df_grouped_complement])
-        combined_df_coding_sorted = combined_df_coding.sort_values(by=['contig', 'start'])
-        combined_df_coding_sorted.to_csv(output_file_coding, sep='\t', index=False)
-
-        combined_df_non_coding = pd.concat([df_missing_methylation_leading, df_missing_methylation_complement])
-        combined_df_non_coding_sorted = combined_df_non_coding.sort_values(by=['contig', 'position'])
-        combined_df_non_coding_sorted.to_csv(output_file_non_coding, sep='\t', index=False)
-
-    elif strand == '+':
-        df_grouped_leading.to_csv(output_file_coding, sep='\t', index=False)
-        df_missing_methylation_leading.to_csv(output_file_non_coding, sep='\t', index=False)
-
-    elif strand == '-':
-        df_grouped_complement.to_csv(output_file_coding, sep='\t', index=False)
-        df_missing_methylation_complement.to_csv(output_file_non_coding, sep='\t', index=False)
-
-    else:
-        raise ValueError(f"Invalid strand: {strand}.")
 
 def pair_json_with_annotation(json_dir, annotation_dir):
 
@@ -295,57 +181,7 @@ def pair_json_with_annotation(json_dir, annotation_dir):
 
 
 if __name__ == "__main__":
-    json_files_dir = Path.cwd()
-
-    # for bed_file_path in Path(json_files_dir).glob("*.json"):
-    #     print(bed_file_path)
-    #     bed_df1 = pd.read_json(bed_file_path)
-    #     counts = bed_df1["modified_base_code"].value_counts()
-    #     print(counts)
-
-    csv_files_dir = Path("outputs") / "coding_and_noncoding"
-    for coding_file in Path(csv_files_dir).glob("*_coding.csv"):
-        # print(coding_file)
-        bed_df1 = pd.read_csv(coding_file, sep="\t", header=0)
-        counts = bed_df1["methylation_type"].value_counts()
-        # print(counts)
-
-
     # bed_df1 = get_list_of_methylated_positions(Path(r"input_bed_files/KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"), Path("input_bed_files"))
-    bed_df1 = pd.read_json(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore_filtered2.json"))
-    annot_df1 = parse_annotation_file(Path(r"D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP825_genome.gff"))
-    coding_df = sort_methylations(bed_df1, annot_df1)
-
-    # file = Path("D:\OneDrive - VUT\_AZV_Helca\methylome\input_roary_output_files_corrected\KP825_genome.gff")
-    # annot = parse_annotation_file(file)
-    # methylation_dir = Path.cwd()
-    # # annotation_dir = Path.cwd() / "input_roary_output_files_corrected"
-    # annotation_dir = Path.cwd() / "gbk_gff_data" / "gff_data_uncorrected"
-    # paired_files = pair_json_with_annotation(methylation_dir, annotation_dir)
-    # df_cds_info = []
-    # for files in paired_files:
-    #     with open(files[1]) as json_file:
-    #         methylated_positions_str = json.load(json_file)
-    #     methylated_positions = {eval(key): value for key, value in methylated_positions_str.items()}
-    #     # print(files[2])
-    #     df_cds_info = parse_annotation_file(files[2])
-    #
-    #     df_cds_info_leading = df_cds_info[df_cds_info["strand"] == "+"]
-    #     methylated_positions_leading = {key: values for key, values in methylated_positions.items() if key[2] == '+'}
-    #     df_grouped_leading, df_missing_methylation_leading = get_list_of_methylated_genes(df_cds_info_leading, '+', methylated_positions_leading)
-
-        # df_cds_info_complement = df_cds_info[df_cds_info['strand'] == '-']
-        # methylated_positions_complement = {key: values for key, values in methylated_positions.items() if key[2] == '-'}
-        # df_grouped_complement, df_missing_methylation_complement = get_list_of_methylated_genes(df_cds_info_complement, '-',
-        #                                                                                         methylated_positions_complement)
-        #
-        # ## choose strand
-        # strand = None
-        # output_dir = r'/home/user_pool_1/nykrynova/methylation_KP_Dorado/ESCMID_version/MM_output/coding_and_noncoding'
-        # os.makedirs(output_dir, exist_ok=True)
-        #
-        # output_coding = os.path.join(output_dir, f"{files[0]}_coding.csv")
-        # output_noncoding = os.path.join(output_dir, f"{files[0]}_noncoding.csv")
-        # generate_coding_and_noncoding_outputs(df_grouped_leading, df_grouped_complement, df_missing_methylation_leading,
-        #                                       df_missing_methylation_complement, strand, output_coding, output_noncoding)
-    print("")
+    bed_df1 = pd.read_json(Path(r"KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore_filtered2.json"))
+    annot_df1 = parse_annotation_file(Path(r"input_roary_output_files_corrected\KP825_genome.gff"))
+    coding_df, non_coding_df, new_annot_coding_df = sort_methylations(bed_df1, annot_df1)
