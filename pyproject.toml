@@ -1,0 +1,20 @@
+[project]
+name = "methylome_miner"
+version = "1.1.0"
+description = "Mine methylations from BED files"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "pandas",
+    "biopython",
+    "bcbio-gff",
+    "pyarrow"
+]
+
+[project.scripts]
+MethylomeMiner = "methylome_miner.methylome_miner:mine_methylations"
+CoreMethylomeMiner = "methylome_miner.methylome_miner:mine_core_methylome"
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
