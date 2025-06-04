@@ -166,7 +166,7 @@ def write_df_to_file(methylations_df, file_name, file_type="csv"):
             methylations_df.to_json(file_name, indent=4)
 
 
-def get_core_methylome(roary_output_file, miner_output_dir="methylome_miner\\MethylomeMiner_output", matrix_values="presence"):
+def get_core_methylome(roary_output_file, miner_output_dir="MethylomeMiner_output", matrix_values="presence"):
     roary_df = pd.read_csv(roary_output_file)
 
     core_methylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
@@ -182,8 +182,8 @@ def get_core_methylome(roary_output_file, miner_output_dir="methylome_miner\\Met
                 core_methylome[genome_name_abbr] = pd.Series()
                 core_methylome[genome_name_abbr] = coding_df.loc[np.where(coding_df["gene_id"].isin(roary_df[f"{genome_name_abbr}_genome"]), True, False), methylation]
                 if matrix_values == "presence":
-                    core_methylome[genome_name_abbr] = np.where(core_methylome[genome_name_abbr] == "[]", 0, 1)
-                    core_methylome.loc[roary_df[f"{genome_name_abbr}_genome"].isna(), genome_name_abbr] = np.nan
+                    core_methylome.loc[core_methylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
+                    core_methylome.loc[(core_methylome[genome_name_abbr] != 0) & ~core_methylome[genome_name_abbr].isna(), genome_name_abbr] = 1
                 elif matrix_values == "positions":
                     continue
                 else:
