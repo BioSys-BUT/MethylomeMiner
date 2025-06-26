@@ -1,14 +1,12 @@
 from pathlib import Path
+import time
 
 import pandas as pd
-import numpy as np
 
 from .loading import METHYLATIONS_KEY
 
-import time
 
-
-def sort_coding_non_coding_methylations(bed_df, annot_df, all_coding=False):
+def sort_coding_non_coding_methylations(bed_df, annot_df, all_annot=False):
     bed_df = bed_df.reset_index(drop=True)
 
     coding_parts = []
@@ -59,7 +57,7 @@ def sort_coding_non_coding_methylations(bed_df, annot_df, all_coding=False):
             coding_parts.append(coding_part)
 
             next_methylation_search_idx = coding_part.index.max() + 1
-        elif all_coding:
+        elif all_annot:
             new_annot_parts.append(add_coding_to_annot(annot))
 
         prev_annot = annot
@@ -120,15 +118,20 @@ def add_annot_to_coding(coding_df, annot):
 
 def add_coding_to_annot(annot, methylations_df=None):
     new_annot = pd.DataFrame([annot])
-    new_annot.columns = new_annot.columns[:7].union([cat[1:] for cat in new_annot.columns[7:]], sort=False)
+    new_col_names = new_annot.columns[:7].union([cat[1:] for cat in new_annot.columns[7:]], sort=False)
+    new_annot.columns = new_col_names
+
+    for name in new_col_names[7:]:
+        new_annot[name] = [[]]
+
     if methylations_df is not None:
         for group, methylations_group in methylations_df.groupby("modified_base_code", observed=False):
-            new_annot[group] = new_annot[group].astype("object")
-            new_annot.at[0, group] = methylations_group["start_index"].values.tolist()
+            new_annot.at[0, group] = methylations_group["start_index"].tolist()
+
     return new_annot
 
 
-def sort_methylations(bed_df, annot_df):
+def sort_methylations(bed_df, annot_df, all_annot=False):
 
     bed_df_grouped = bed_df.groupby(["reference_seq", "strand"], observed=False)
     annot_df_grouped = annot_df.groupby(["record_id", "strand"], observed=False)
@@ -140,7 +143,7 @@ def sort_methylations(bed_df, annot_df):
         annot_df_group = annot_df_grouped.get_group(group)
         annot_df_group = pd.concat([annot_df_group, pd.DataFrame(columns=methylation_types, dtype="object")])
 
-        coding_df, non_coding_df, new_annot_df = sort_coding_non_coding_methylations(bed_df_group, annot_df_group)
+        coding_df, non_coding_df, new_annot_df = sort_coding_non_coding_methylations(bed_df_group, annot_df_group, all_annot=all_annot)
 
         all_coding.append(coding_df)
         all_non_coding.append(non_coding_df)
@@ -171,7 +174,7 @@ def get_core_methylome(roary_output_file, miner_output_dir="MethylomeMiner_outpu
 
     core_methylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
 
-    for coding_df_file in list(Path(miner_output_dir).glob("*_annot_with_methylations.csv")):
+    for coding_df_file in list(Path(miner_output_dir).glob("*_all_annot_with_methylations.csv")):
         coding_df = pd.read_csv(coding_df_file, delimiter=";")
         methylation_types = coding_df.iloc[:, 7:].columns
 
@@ -180,7 +183,11 @@ def get_core_methylome(roary_output_file, miner_output_dir="MethylomeMiner_outpu
         for methylation, core_methylome in core_methylomes.items():
             if methylation in methylation_types:
                 core_methylome[genome_name_abbr] = pd.Series()
-                core_methylome[genome_name_abbr] = coding_df.loc[np.where(coding_df["gene_id"].isin(roary_df[f"{genome_name_abbr}_genome"]), True, False), methylation]
+
+                genes = roary_df[f"{genome_name_abbr}_genome"]
+                valid_genes = genes[pd.notna(genes) & genes.isin(coding_df["gene_id"])]
+                core_methylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(coding_df.set_index("gene_id")[methylation])
+
                 if matrix_values == "presence":
                     core_methylome.loc[core_methylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
                     core_methylome.loc[(core_methylome[genome_name_abbr] != 0) & ~core_methylome[genome_name_abbr].isna(), genome_name_abbr] = 1

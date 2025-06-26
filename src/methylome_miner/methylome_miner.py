@@ -7,7 +7,7 @@ import click
 
 from .loading import parse_annotation_file, pair_bed_and_annot_files
 from .backend import sort_methylations, write_df_to_file, get_core_methylome
-from .preprocessing import get_list_of_methylated_positions
+from .preprocessing import get_list_of_methylated_positions, calculate_med_coverage
 
 
 class Mutex(click.Option):
@@ -66,7 +66,7 @@ class Mutex(click.Option):
     required=False,
     default=90,
     type=click.IntRange(0, 100),
-    help='Minimum percent modified.',
+    help='Minimum percent modified. Must be integer value between 0 and 100.',
 )
 @click.option(
     '--work_dir',
@@ -118,7 +118,7 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 )
 @click.option(
     '--input_annot_dir',
-    required=False,
+    required=True,
     type=click.Path(
         exists=True, dir_okay=True,
         readable=True, resolve_path=True),
@@ -173,13 +173,16 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 )
 def mine_core_methylome(input_bed_dir, input_annot_dir, roary_output_file, work_dir, min_coverage, min_percent_modified, matrix_values, write_all_files):
     files_pairs = pair_bed_and_annot_files(input_bed_dir, input_annot_dir)
+
     for prefix, files in files_pairs.items():
         if (write_all_files and (not Path(work_dir, prefix + "_coding.csv").exists() or
                                  not Path(work_dir, prefix + "_non_coding.csv").exists() or
-                                 not Path(work_dir, prefix + "_annot_with_methylations.csv").exists()
-        ) or (not write_all_files and not Path(work_dir, prefix + "_annot_with_methylations.csv").exists())):
+                                 not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists()
+        ) or (not write_all_files and not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists())):
                 bed_file = files["bed_file"]
                 annot_file = files["annot_file"]
+                if min_coverage is None:
+                    min_coverage = calculate_med_coverage(input_bed_dir)
                 bed_df = get_list_of_methylated_positions(
                     bed_file,
                     input_bed_dir,
@@ -190,8 +193,8 @@ def mine_core_methylome(input_bed_dir, input_annot_dir, roary_output_file, work_
 
                 if bed_df is not None:
                     annot_df = parse_annotation_file(Path(annot_file))
-                    coding_df, non_coding_df, new_annot_df = sort_methylations(bed_df, annot_df)
-                    write_df_to_file(new_annot_df, Path(work_dir, prefix + "_annot_with_methylations.csv"))
+                    coding_df, non_coding_df, new_annot_df = sort_methylations(bed_df, annot_df, all_annot=True)
+                    write_df_to_file(new_annot_df, Path(work_dir, prefix + "_all_annot_with_methylations.csv"))
                     if write_all_files:
                         write_df_to_file(coding_df, Path(work_dir, prefix + "_coding.csv"))
                         write_df_to_file(non_coding_df, Path(work_dir, prefix + "_non_coding.csv"))
