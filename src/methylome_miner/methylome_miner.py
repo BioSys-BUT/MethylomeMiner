@@ -23,7 +23,7 @@ class Mutex(click.Option):
         for mutex_opt in self.not_required_if:
             if mutex_opt in opts:
                 if current_opt:
-                    raise click.UsageError("Illegal usage: '" + str(self.name) + "' is mutually exclusive with " + str(mutex_opt) + ".")
+                    raise click.UsageError("Illegal usage: '" + str(self.name) + "' is mutually exclusive with '" + str(mutex_opt) + "'.")
                 else:
                     self.prompt = None
         return super(Mutex, self).handle_parse_result(ctx, opts, args)
@@ -48,7 +48,7 @@ class Mutex(click.Option):
 )
 @click.option(
     '--input_bed_dir',
-    required=True, cls=Mutex, not_required_if="min_coverage",  # Funguje Mutex? A co když jsou obě varianty?
+    required=True, cls=Mutex, not_required_if=["min_coverage"],
     type=click.Path(
         exists=True, dir_okay=True,
         readable=True, resolve_path=True),
@@ -56,7 +56,7 @@ class Mutex(click.Option):
 )
 @click.option(
     '--min_coverage',
-    required=True, cls=Mutex, not_required_if="input_bed_dir",
+    required=True, cls=Mutex, not_required_if=["input_bed_dir"],
     default=None,
     type=int,
     help='Minimum coverage for methylated position.',
