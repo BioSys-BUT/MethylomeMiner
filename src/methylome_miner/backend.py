@@ -1,9 +1,114 @@
+"""
+Pre-processing module filter raw bedMethyle files and store filtered files in various file formats
+"""
+
 from pathlib import Path
+import statistics
 import time
 
 import pandas as pd
 
-from .loading import METHYLATIONS_KEY
+from .loading import METHYLATIONS_KEY, parse_bed_file
+
+
+def calculate_median_coverage(bed_dir_path):
+    """
+    Calculate median coverage from all available bedMethyl files
+
+    :param Path bed_dir_path: Path to a directory with bedMethyl files.
+    :rtype: int
+    :return: An integer value of median coverage across all bedMethyl files.
+    """
+    bed_files = list(bed_dir_path.glob("*.bed"))
+
+    if not bed_files:
+        print(f"Median coverage cannot be calculated. No bedMethyl files found at: {bed_dir_path}")
+        return None
+
+    medians = []
+    for bed_file in bed_files:
+        bed_df = pd.read_csv(bed_file, sep="\t", header=None, engine="pyarrow")
+        medians.append(bed_df[4].median())
+    return round(statistics.median(medians))
+
+
+def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_percent_modified=90):
+    """
+    Filter bedMethyl table based on minimum/median coverage and percent of modified bases.
+
+    Median coverage is calculated from all available bedMethyl files, if minimum coverage is not provided.
+
+    :param bed_file_path: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param bed_dir_path: Path to a directory with bedMethyl files.
+    :param min_coverage: An integer value of minimum coverage for modified position to be kept.
+    :param min_percent_modified: A minimum percent of modified base occurrence.
+    :rtype: pd.DataFrame
+    :return: Filtered bedMethyl table
+    """
+
+    bed_df = parse_bed_file(bed_file_path)
+
+    if bed_df is None:
+        return None
+
+    if min_coverage is None:
+        min_coverage = calculate_median_coverage(bed_dir_path)
+        if min_coverage is None:
+            return None
+        else:
+            print(f"Minimum coverage value not provided. Calculated median coverage {min_coverage} used instead.")
+
+    df_filter = ((bed_df["score"] >= min_coverage) & (bed_df["percent_modified"] >= min_percent_modified))
+
+    bed_df_filtered = bed_df[df_filter]
+
+    if bed_df_filtered.empty:
+        print(f"No modified positions found with the specified conditions: "
+              f"coverage {min_coverage}, percent modified {min_percent_modified} %.")
+        return None
+    else:
+        return bed_df_filtered
+
+
+def write_bed_file(bed_df, file_path, file_format):
+    """
+    Write pandas DataFrame to file of requested file format.
+
+    :param pd.DataFrame bed_df: BedMethyl table to be saved.
+    :param Path file_path: Path to new file.
+    :param str file_format: File format of the new file (options are 'json', 'csv', 'tsv', 'bed').
+    """
+    output_file_path = file_path.with_stem(file_path.stem + f"_filtered.{file_format}")
+
+    match file_format:
+        case "json":
+            pd.DataFrame.to_json(bed_df, output_file_path)
+        case "csv":
+            bed_df.to_csv(output_file_path, index=False)
+        case "tsv":
+            bed_df.to_csv(output_file_path, index=False, sep="\t")
+        case "bed":
+            to_bed(bed_df, output_file_path)
+        case _:
+            print("Unsupported file format. Choose from: json, csv, tsv or bed.")
+
+
+def to_bed(bed_df, file_path):
+    """
+    Save pandas DataFrame as bedMethyl file.
+
+    File structure is the same as the output bedMethyl file from Modkit tool.
+    The bedMethyl table contains eighteen columns, but the bedMethyl file has only nine columns that are
+    tab-delimited. The remaining columns are stored within the last column and they are space-delimited.
+
+    :param pd.DataFrame bed_df: BedMethyl table to be saved.
+    :param Path file_path: Path to new bedMethyl file.
+    """
+    tab_part = bed_df.iloc[:, :9].astype(str).agg("\t".join, axis=1)
+    space_part = bed_df.iloc[:, 9:].astype(str).agg(" ".join, axis=1)
+
+    with open(file_path, mode="w") as file:
+        file.write("\n".join(tab_part + " " + space_part) + "\n")
 
 
 def sort_coding_non_coding_methylations(bed_df, annot_df, all_annot=False):
