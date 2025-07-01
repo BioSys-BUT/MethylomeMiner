@@ -1,11 +1,6 @@
 """
 Module to check and verify input files.
-TODO:
-Move all checks of files and dirs here
-Move all checks of datatypes here
-Test try-except in read_bed_file
 """
-import time
 from io import StringIO
 from pathlib import Path
 
@@ -48,12 +43,6 @@ ANNOTATION_STRUCTURE = {
     "note": str
 }
 
-# def check_dir_availability(path_to_dir_with_bed_files):
-#     # for get_list_of_methylated_positions resp. calculate_med_coverage
-#     if not os.path.isdir(path_to_dir_with_bed_files):
-#         print("The path you provided is incorrect or does not exist. Exiting the program.")
-#         return
-
 
 def parse_bed_file(bed_file_path):
     """
@@ -88,9 +77,22 @@ def parse_bed_file(bed_file_path):
 
 
 def parse_annotation_file(annotation_file_path):
-    # Are custom qualifiers set to the right value? locus_tag is in both
-    # TODO: Add check that annotation file is sorted by positions of genes, or sorted it automatically
-    # (because of methylation before the first gene and after the last one)
+    """
+    Parse genome annotation file into custom DataFrame with only CDS features
+
+    Only selected information are stored in the DataFrame:
+    - record id
+    - feature qualifiers
+    - position of the start of the feature
+    - position of the end of the feature
+    - strand ('+', '-') where the feature is located
+    - description of the product of the feature
+    - additional notes for the feature
+
+    :param Path annotation_file_path: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :rtype pd.DataFrame:
+    :return: Table of genome annotation of CDS
+    """
     with open(annotation_file_path) as annot_file:
         match annotation_file_path.suffix:
             case ".gbk":
@@ -101,33 +103,45 @@ def parse_annotation_file(annotation_file_path):
                 list_of_records = list(GFF.parse(new_annot_file))
                 custom_qualifier = "ID"
             case _:
-                raise ValueError(f"Invalid file format: {annotation_file_path}. Allowed formats are: .gbk, .gff")
+                raise ValueError(f"Invalid file format: {annotation_file_path}. Allowed formats are: '.gbk', '.gff'")
 
     cds_data = []
-    for record in list_of_records:
-        for feature in record.features:
-            if feature.type == "CDS":
-                cds_data.append({
-                    "record_id": record.id,
-                    "gene_id": feature.qualifiers[custom_qualifier][0],
-                    "start": feature.location.start,
-                    "end": feature.location.end,
-                    "strand": "+" if feature.location.strand == 1 else "-",
-                    "product": feature.qualifiers["product"][0],
-                    "note": feature.qualifiers["note"][0]
-                })
-    cds_df = pd.DataFrame(cds_data)
-    cds_df = cds_df.astype(ANNOTATION_STRUCTURE)
-    return cds_df
+    if not list_of_records:
+        print("No annotation records were found.")
+        return None
+    else:
+        for record in list_of_records:
+            for feature in record.features:
+                if feature.type == "CDS":
+                    cds_data.append({
+                        "record_id": record.id,
+                        "gene_id": feature.qualifiers[custom_qualifier][0],
+                        "start": feature.location.start,
+                        "end": feature.location.end,
+                        "strand": "+" if feature.location.strand == 1 else "-",
+                        "product": feature.qualifiers["product"][0],
+                        "note": feature.qualifiers["note"][0]
+                    })
+        cds_df = pd.DataFrame(cds_data)
+        cds_df = cds_df.astype(ANNOTATION_STRUCTURE)
+        cds_df = cds_df.sort_values(by=["record_id", "start"])
+        return cds_df
 
 
 def check_and_fix_gff(gff_file):
+    """
+    Fix annotation in gff file format that starts with '<1' instead of '1'.
+
+    :param gff_file: Annotation file opened for reading.
+    :rtype str:
+    :return: String with corrected annotation ready to be parsed by standard parsing function.
+    """
     fixed_lines = []
     for line_number, line in enumerate(gff_file, start=1):
         if "<1" in line:
             fixed_line = line.replace("<1", "1")  # before line.replace("<1","0")
             fixed_lines.append(fixed_line)
-            print(f"Line {line_number}: Replaced '<1' with '1'")
+            # print(f"Line {line_number}: Replaced '<1' with '1'")
         else:
             fixed_lines.append(line)
 
@@ -154,9 +168,3 @@ def pair_bed_and_annot_files(bed_dir, annot_dir):
             paired_files[prefix] = {"bed_file": bed_file, "annot_file": annot_group[prefix]}
 
     return paired_files
-
-
-if __name__ == "__main__":
-    start_time = time.time()
-    bed_df1 = parse_bed_file(Path(r"input_bed_files\KP825_b53_4mC_5mC_6mA_calls_modifications_whole_run_aligned_sorted_pileup_SUP_qscore.bed"))
-    print(f"Time bed_df: {time.time() - start_time} s.")

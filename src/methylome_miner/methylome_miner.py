@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from .loading import parse_annotation_file
-from .backend import sort_methylations, write_df_to_file, filter_methylations, write_bed_file
+from .backend import sort_methylations, write_df_to_file, filter_methylations
 
 
 class Mutex(click.Option):
@@ -104,17 +104,19 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     (modification is within coding region) and non-coding (modification is in intergenic region) groups.
 
 
-    :param str input_bed_file: Path to a bedMethyl file with information about modified and unmodified bases.
-    :param str input_annot_file: Path to a file with genome annotation in *.gff (v3) or *.gbk file format.
-    :param str input_bed_dir: Path to a directory with bedMethyl files.
+    :param Path input_bed_file: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
-    :param str work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param Path work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
     :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
     """
+    print(f"Mining of {input_bed_file} started.")
 
+    # Filter out invalid base modifications
     filtered_bed_df = filter_methylations(
         input_bed_file,
         input_bed_dir,
@@ -123,22 +125,31 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     )
 
     if filtered_bed_df is not None:
+        # Check (and create) working directory for MethylomeMiner
         if not work_dir.exists():
             work_dir.mkdir(parents=True, exist_ok=True)
 
+        # Check (and create) name of output files of MethylomeMiner
         if file_name is None:
             file_path = Path(work_dir, input_bed_file.stem.split("_")[0].split(".")[0])
         else:
             file_path = Path(work_dir, file_name)
 
+        # Save filtered bedMethyl table if requested
         if write_filtered_bed:
-            write_bed_file(filtered_bed_df, file_path, file_format=filtered_bed_format)
+            file_path = file_path.with_stem(file_path.stem + f"_filtered.{filtered_bed_format}")
+            write_df_to_file(filtered_bed_df, file_path)
 
+        # Parse genome annotation file
         annot_df = parse_annotation_file(input_annot_file)
-        coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
+        if annot_df is not None:
 
-        write_df_to_file(coding_df, file_path.with_suffix("_coding.csv"))
-        write_df_to_file(non_coding_df, file_path.with_suffix("_non_coding.csv"))
-        write_df_to_file(new_annot_df, file_path.with_suffix("_annot_with_methylations.csv"))
+            # According to annotation sort modifications into coding and non-coding groups
+            coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
+
+            # Store all results
+            write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
+            write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
+            write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
 
     print("Methylome mining done.")
