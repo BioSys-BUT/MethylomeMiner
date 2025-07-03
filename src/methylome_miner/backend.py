@@ -213,8 +213,6 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
     'Non-coding' modifications are in the intergenic region. Each modification receive information about the previous
     and the next coding region.
 
-    TODO: Overlapping genes (remove next_methylation_search_idx?) and ?
-
     :param pd.DataFrame bed_df: Table with base modification information.
     :param pd.DataFrame annot_df: Table with genome annotation.
     :rtype (pd.DataFrame, pd.DataFrame, pd.DataFrame):
@@ -297,7 +295,6 @@ def sort_methylations(bed_df, annot_df):
     """
     Sort base modifications according to annotation consecutively by reference sequence name and strand.
 
-    TODO: Can be sort_methylations and sort_coding_non_coding_methylations merged together?
     :param pd.DataFrame bed_df: Table of base modifications.
     :param annot_df: Table with annotation.
     :rtype (pd.DataFrame, pd.DataFrame, pd.DataFrame):
@@ -338,7 +335,8 @@ def sort_methylations(bed_df, annot_df):
 
 
 def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
-                      work_dir, file_name, write_filtered_bed, filtered_bed_format, write_all=True):
+                       work_dir, file_name, write_filtered_bed, filtered_bed_format, split_by_reference,
+                       write_all=True):
     """
     Filter modified bases stored in bedMethyl file and sort them according to annotation into coding and non-coding.
 
@@ -356,6 +354,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
     :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
+    :param bool split_by_reference: Write all outputs to separate files based on reference sequence.
     :param bool write_all: True to write all DataFrames (coding, non-coding, extended annotation) to CSV files.
     :rtype pd.DataFrame:
     :return: DataFrame of extended annotation with added base modification positions.
@@ -393,12 +392,27 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
             # According to annotation sort modifications into coding and non-coding groups
             coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
 
-            # Store all results
-            if write_all:
-                write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
-                write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
-            # Write always because of core methylome
-            write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
+            # Split outputs by reference sequences from annotation
+            if split_by_reference:
+
+                reference_seqs = new_annot_df["record_id"].astype("category").cat.categories
+                for ref_seq in reference_seqs:
+                    coding_df_part = coding_df[coding_df["reference_seq"] == ref_seq]
+                    non_coding_df_part = non_coding_df[non_coding_df["reference_seq"] == ref_seq]
+                    new_annot_df_part = new_annot_df[new_annot_df["record_id"] == ref_seq]
+
+                    write_df_to_file(coding_df_part, file_path.with_stem(file_path.stem + f"_{ref_seq}_coding.csv"))
+                    write_df_to_file(non_coding_df_part, file_path.with_stem(file_path.stem + f"_{ref_seq}_non_coding.csv"))
+                    write_df_to_file(new_annot_df_part, file_path.with_stem(
+                        file_path.stem + f"_{ref_seq}_all_annot_with_methylations.csv"))
+
+            else:
+                # Store all results
+                if write_all:
+                    write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
+                    write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
+                # Write always because of core methylome
+                write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
     print("Methylome mining done.")
     return new_annot_df
 
@@ -514,6 +528,7 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
                 write_filtered_bed=write_all_results,
                 filtered_bed_format="csv",
                 write_all=write_all_results,
+                separate_by_reference=False,
             )
 
     # Create core methylomes for all present base modifications
@@ -522,6 +537,6 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
     # For each base modification save individual output file
     for methylation, methylome in core_methylomes.items():
         if not methylome.iloc[:, 1:].isnull().values.all():
-            write_df_to_file(methylome, Path(work_dir, methylation + "_core_methylome_" + matrix_values +".csv"))
+            write_df_to_file(methylome, Path(work_dir, methylation + "_core_methylome_" + matrix_values + ".csv"))
 
     print("Core methylome mining done.")

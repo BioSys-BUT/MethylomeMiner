@@ -90,8 +90,13 @@ class Mutex(click.Option):
     help="Choose filtered bedMethyl file format.\n"
          "Options: 'json', 'csv', 'tsv', 'bed'.\nDefault format is 'csv'.",
 )
+@click.option(
+    "--split_by_reference",
+    required=False, is_flag=True,
+    help="Write all outputs to separate files based on reference sequence (contig, chromosome, plasmid, etc.).",
+)
 def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
-                      work_dir, file_name, write_filtered_bed, filtered_bed_format):
+                      work_dir, file_name, write_filtered_bed, filtered_bed_format, split_by_reference):
     """
     Filter modified bases stored in bedMethyl file and sort them according to annotation into coding and non-coding.
 
@@ -109,9 +114,10 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
     :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
+    :param bool split_by_reference: Write all outputs to separate files based on reference sequence.
     """
     _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
-                       work_dir, file_name, write_filtered_bed, filtered_bed_format)
+                       work_dir, file_name, write_filtered_bed, filtered_bed_format, split_by_reference)
 
 
 @click.command()
