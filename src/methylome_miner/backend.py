@@ -528,7 +528,7 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
                 write_filtered_bed=write_all_results,
                 filtered_bed_format="csv",
                 write_all=write_all_results,
-                separate_by_reference=False,
+                split_by_reference=False,
             )
 
     # Create core methylomes for all present base modifications
