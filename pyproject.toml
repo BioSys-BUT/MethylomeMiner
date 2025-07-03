@@ -13,7 +13,7 @@ dependencies = [
 
 [project.scripts]
 MethylomeMiner = "methylome_miner.methylome_miner:mine_methylations"
-CoreMethylomeMiner = "methylome_miner.core_methylome_miner:mine_core_methylations"
+CoreMethylomeMiner = "methylome_miner.methylome_miner:mine_core_methylations"
 
 [build-system]
 requires = ["flit_core<4"]

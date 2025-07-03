@@ -1,12 +1,11 @@
 """
-MethylomeMiner module contains functions to run the tool to filter and sort methylations and core methylations
+MethylomeMiner module contains functions to run the tool to filter, sort methylations and create core methylome
 """
 from pathlib import Path
 
 import click
 
-from .loading import parse_annotation_file
-from .backend import sort_methylations, write_df_to_file, filter_methylations
+from .backend import _mine_methylations, _mine_core_methylations
 
 
 class Mutex(click.Option):
@@ -45,7 +44,7 @@ class Mutex(click.Option):
     "--input_annot_file",
     required=True,
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, path_type=Path),
-    help="Path to a file with genome annotation in *.gff (v3) or *.gbk file format.",
+    help="Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.",
 )
 @click.option(
     "--input_bed_dir",
@@ -69,22 +68,19 @@ class Mutex(click.Option):
 )
 @click.option(
     "--work_dir",
-    required=False,
-    default=Path(Path.cwd(), "MethylomeMiner_output"),
+    required=False, default=Path(Path.cwd(), "MethylomeMiner_output"),
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True, path_type=Path),
     help="Path to directory for MethylomeMiner outputs.\n"
          "If not provided, 'MethylomeMiner_output' folder will be created in the current working directory.",
 )
 @click.option(
     "--file_name",
-    required=False,
-    default=None,
+    required=False, default=None,
     help="Custom name for MethylomeMiner outputs.",
 )
 @click.option(
     "--write_filtered_bed",
-    required=False,
-    is_flag=True,
+    required=False, is_flag=True,
     help="Write filtered bedMethyl file to a new file.",
 )
 @click.option(
@@ -114,42 +110,82 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
     :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
     """
-    print(f"Mining of {input_bed_file} started.")
+    _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
+                       work_dir, file_name, write_filtered_bed, filtered_bed_format)
 
-    # Filter out invalid base modifications
-    filtered_bed_df = filter_methylations(
-        input_bed_file,
-        input_bed_dir,
-        min_coverage=min_coverage,
-        min_percent_modified=min_percent_modified,
-    )
 
-    if filtered_bed_df is not None:
-        # Check (and create) working directory for MethylomeMiner
-        if not work_dir.exists():
-            work_dir.mkdir(parents=True, exist_ok=True)
+@click.command()
+@click.option(
+    "--input_bed_dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True, path_type=Path),
+    help="Path to a directory with bedMethyl files.",
+)
+@click.option(
+    "--input_annot_dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True, path_type=Path),
+    help="Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.",
+)
+@click.option(
+    "--roary_file",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, path_type=Path),
+    help="Path to output file from Roary tool named 'gene_presence_absence.csv'.",
+)
+@click.option(
+    "--min_coverage",
+    required=False, default=None, type=int,
+    help="An integer value of minimum coverage for modified position to be kept.\n"
+         "This option is used only if MethylomeMiner was not previously used for input bedMethyl files"
+         "and the results are not present in the 'work_dir' folder.\n"
+         "If value is not provided, median coverage will be calculated from files in the 'input_bed_dir' folder.\n",
+)
+@click.option(
+    "--min_percent_modified",
+    required=False, default=90, type=click.FloatRange(0, 100),
+    help="A minimum percent of modified base occurrence.\n"
+         "This option is used only if MethylomeMiner was not previously used for input bedMethyl files"
+         "and the results are not present in the 'work_dir' folder.\n"
+         "A float value between 0 and 100 inclusive. Default value is 90 %.",
+)
+@click.option(
+    "--matrix_values",
+    required=False, default="presence",
+    help="Type of values in the output core methylome matrix.\n"
+         "Options:\n"
+         "'presence': '0' value for no detected base modifications, '1' value for detected base modification,\n"
+         "'positions': a list of exact locations of base modifications within a core gene.\n"
+         "Default is 'presence' option.",
+)
+@click.option(
+    "--work_dir",
+    required=False, default=Path(Path.cwd(), "MethylomeMiner_output"),
+    type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True, path_type=Path),
+    help="Path to directory for MethylomeMiner outputs.\n"
+         "If not provided, 'MethylomeMiner_output' folder will be created in the current working directory.",
+)
+@click.option(
+    "--write_all_results",
+    required=False, is_flag=True,
+    help="Write all results from MethylomeMiner to files: methylations sorted to coding and non-coding groups, "
+         "genome annotation with found methylations in coding regions.\n",
+)
+def mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+                           matrix_values, work_dir, write_all_results):
+    """
+    Create core methylome from bedMethyl files, genome annotation and Roary output.
 
-        # Check (and create) name of output files of MethylomeMiner
-        if file_name is None:
-            file_path = Path(work_dir, input_bed_file.stem.split("_")[0].split(".")[0])
-        else:
-            file_path = Path(work_dir, file_name)
-
-        # Save filtered bedMethyl table if requested
-        if write_filtered_bed:
-            file_path = file_path.with_stem(file_path.stem + f"_filtered.{filtered_bed_format}")
-            write_df_to_file(filtered_bed_df, file_path)
-
-        # Parse genome annotation file
-        annot_df = parse_annotation_file(input_annot_file)
-        if annot_df is not None:
-
-            # According to annotation sort modifications into coding and non-coding groups
-            coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
-
-            # Store all results
-            write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
-            write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
-            write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
-
-    print("Methylome mining done.")
+    :param Path input_bed_dir: Path to a directory with bedMethyl files.
+    :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
+    :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
+    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for
+         no detected base modifications, '1' value for detected base modification, 'positions': a list of exact
+         locations of base modifications within a core gene. Default is 'presence' option.
+    :param Path work_dir: Path to directory for (Core)MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param bool write_all_results: Write all results from (Core)MethylomeMiner to files. Default: False
+    """
+    _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+                            matrix_values, work_dir, write_all_results)

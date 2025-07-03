@@ -1,5 +1,5 @@
 """
-Pre-processing module filter raw bedMethyle files and store filtered files in various file formats
+Module to filter raw bedMethyl files, store filtered files in various file formats and create core methylome
 """
 
 from pathlib import Path
@@ -7,7 +7,7 @@ import statistics
 
 import pandas as pd
 
-from .loading import METHYLATIONS_KEY, parse_bed_file
+from .loading import METHYLATIONS_KEY, parse_bed_file, parse_annotation_file, pair_bed_and_annot_files
 
 
 def calculate_median_coverage(bed_dir_path):
@@ -37,10 +37,10 @@ def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_perc
 
     Median coverage is calculated from all available bedMethyl files, if minimum coverage is not provided.
 
-    :param bed_file_path: Path to a bedMethyl file with information about modified and unmodified bases.
-    :param bed_dir_path: Path to a directory with bedMethyl files.
-    :param min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param min_percent_modified: A minimum percent of modified base occurrence.
+    :param Path bed_file_path: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path bed_dir_path: Path to a directory with bedMethyl files.
+    :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
+    :param float min_percent_modified: A minimum percent of modified base occurrence.
     :rtype: pd.DataFrame
     :return: Filtered bedMethyl table
     """
@@ -337,32 +337,191 @@ def sort_methylations(bed_df, annot_df):
     return all_coding_df, all_non_coding_df, new_annot_df
 
 
-def get_core_methylome(roary_output_file, miner_output_dir="MethylomeMiner_output", matrix_values="presence"):
+def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
+                      work_dir, file_name, write_filtered_bed, filtered_bed_format, write_all=True):
+    """
+    Filter modified bases stored in bedMethyl file and sort them according to annotation into coding and non-coding.
+
+    Filtration is performed based on requested coverage and the percent of modified bases.
+    Sorting is conducted based on provided annotation of the genome. Modified bases are sorted into coding
+    (modification is within coding region) and non-coding (modification is in intergenic region) groups.
+
+
+    :param Path input_bed_file: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :param Path input_bed_dir: Path to a directory with bedMethyl files.
+    :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
+    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param Path work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param str file_name: Custom name for MethylomeMiner outputs.
+    :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
+    :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
+    :param bool write_all: True to write all DataFrames (coding, non-coding, extended annotation) to CSV files.
+    :rtype pd.DataFrame:
+    :return: DataFrame of extended annotation with added base modification positions.
+    """
+    print(f"Mining of {input_bed_file} started.")
+
+    # Filter out invalid base modifications
+    filtered_bed_df = filter_methylations(
+        input_bed_file,
+        input_bed_dir,
+        min_coverage=min_coverage,
+        min_percent_modified=min_percent_modified,
+    )
+
+    if filtered_bed_df is not None:
+        # Check (and create) working directory for MethylomeMiner
+        if not work_dir.exists():
+            work_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check (and create) name of output files of MethylomeMiner
+        if file_name is None:
+            file_path = Path(work_dir, input_bed_file.stem.split("_")[0].split(".")[0])
+        else:
+            file_path = Path(work_dir, file_name)
+
+        # Save filtered bedMethyl table if requested
+        if write_filtered_bed:
+            bed_file_path = file_path.with_stem(file_path.stem + f"_filtered.{filtered_bed_format}")
+            write_df_to_file(filtered_bed_df, bed_file_path)
+
+        # Parse genome annotation file
+        annot_df = parse_annotation_file(input_annot_file)
+        if annot_df is not None:
+
+            # According to annotation sort modifications into coding and non-coding groups
+            coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
+
+            # Store all results
+            if write_all:
+                write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
+                write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
+            # Write always because of core methylome
+            write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
+    print("Methylome mining done.")
+    return new_annot_df
+
+
+def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
+    """
+
+    :param Path roary_output_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
+    :param Path miner_output_dir: Path to directory for (Core)MethylomeMiner outputs.
+    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for 
+         no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
+         locations of base modifications within a core gene. Default is 'presence' option.
+    :rtype dict:
+    :return: Dictionary with keys corresponding to found modification types and values are DataFrames, where rows
+         are core genes according to Roary and columns are analyzed genomes. Values in the DataFrame are as requested
+         through `matrix_values` parameter.
+    """
+    # Load results from Roary
     roary_df = pd.read_csv(roary_output_file)
-
+    
+    # Prepare output dictionary with DataFrames 
     core_methylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
+    
+    # Fill DataFrames based on results from MethylomeMiner, specifically files with extended annotation
+    for annot_df_file in list(Path(miner_output_dir).glob("*_all_annot_with_methylations.csv")):
+        
+        annot_df = pd.read_csv(annot_df_file)
+        
+        methylation_types = annot_df.iloc[:, 7:].columns
+        genome_name_abbr = annot_df_file.stem.split("_")[0]
 
-    for coding_df_file in list(Path(miner_output_dir).glob("*_all_annot_with_methylations.csv")):
-        coding_df = pd.read_csv(coding_df_file, delimiter=";")
-        methylation_types = coding_df.iloc[:, 7:].columns
-
-        genome_name_abbr = coding_df_file.stem.split("_")[0]
-
+        # For each extended annotation file, add found modifications to correct core gene
         for methylation, core_methylome in core_methylomes.items():
+
+            core_methylome[genome_name_abbr] = pd.Series()
+
             if methylation in methylation_types:
-                core_methylome[genome_name_abbr] = pd.Series()
 
-                genes = roary_df[f"{genome_name_abbr}_genome"]
-                valid_genes = genes[pd.notna(genes) & genes.isin(coding_df["gene_id"])]
-                core_methylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(coding_df.set_index("gene_id")[methylation])
+                # Get column from Roary file that corresponds to current extended annotation DataFrame
+                col_names = list(roary_df.filter(regex=genome_name_abbr).columns)
+                if len(col_names) != 1:
+                    print("Invalid column names in Roary file.")
+                    return None
 
+                # Find core genes in the extended annotation
+                valid_genes = roary_df[col_names[0]][
+                    pd.notna(roary_df[col_names[0]]) & roary_df[col_names[0]].isin(annot_df["gene_id"])]
+
+                # Add found base modifications' positions to core genes
+                core_methylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(
+                    annot_df.set_index("gene_id")[methylation])
+
+                # Change lists of positions to '0' and '1' values, if requested
                 if matrix_values == "presence":
                     core_methylome.loc[core_methylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
-                    core_methylome.loc[(core_methylome[genome_name_abbr] != 0) & ~core_methylome[genome_name_abbr].isna(), genome_name_abbr] = 1
+                    core_methylome.loc[(core_methylome[genome_name_abbr] != 0) & ~core_methylome[
+                        genome_name_abbr].isna(), genome_name_abbr] = 1
                 elif matrix_values == "positions":
                     continue
                 else:
+                    print("Invalid matrix values requested. Only 'presence' and 'positions' options are possible.")
                     return None
-            else:
-                core_methylome[genome_name_abbr] = pd.Series()
+
     return core_methylomes
+
+
+def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+                           matrix_values, work_dir, write_all_results):
+    """
+    Create core methylome from bedMethyl files, genome annotation and Roary output.
+
+    :param Path input_bed_dir: Path to a directory with bedMethyl files.
+    :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
+    :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
+    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for 
+         no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
+         locations of base modifications within a core gene. Default is 'presence' option.
+    :param Path work_dir: Path to directory for (Core)MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param bool write_all_results: Write all results from (Core)MethylomeMiner to files. Default: False
+    """
+    print("Core methylome mining started.")
+
+    # For each input bed file find matching annotation file based on the prefix in the name of the files
+    files_pairs = pair_bed_and_annot_files(input_bed_dir, input_annot_dir)
+    if files_pairs is None:
+        print("No matching bedMethyl and annotation files found.")
+
+    for prefix, files in files_pairs.items():
+        # Check if it is necessary to run MethylomeMiner
+        if ((write_all_results and (not Path(work_dir, prefix + "_coding.csv").exists() or
+                                    not Path(work_dir, prefix + "_non_coding.csv").exists() or
+                                    not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists() or
+                                    not Path(work_dir, prefix + "_filtered.csv").exists())
+        ) or (not write_all_results and not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists())):
+            # Before running MethylomeMiner, check is minimum coverage was set, if not calculate median coverage
+            # and use it for filtration
+            if min_coverage is None:
+                min_coverage = calculate_median_coverage(input_bed_dir)
+                print(
+                    f"Minimum coverage value not provided. Calculated median coverage {min_coverage} used instead.")
+
+            # Run MethylomeMiner
+            _mine_methylations(
+                input_bed_file=files["bed_file"],
+                input_annot_file=files["annot_file"],
+                input_bed_dir=input_bed_dir,
+                min_coverage=min_coverage,
+                min_percent_modified=min_percent_modified,
+                work_dir=work_dir,
+                file_name=prefix,
+                write_filtered_bed=write_all_results,
+                filtered_bed_format="csv",
+                write_all=write_all_results,
+            )
+
+    # Create core methylomes for all present base modifications
+    core_methylomes = get_core_methylome(roary_file, miner_output_dir=work_dir, matrix_values=matrix_values)
+
+    # For each base modification save individual output file
+    for methylation, methylome in core_methylomes.items():
+        if not methylome.iloc[:, 1:].isnull().values.all():
+            write_df_to_file(methylome, Path(work_dir, methylation + "_core_methylome_" + matrix_values +".csv"))
+
+    print("Core methylome mining done.")

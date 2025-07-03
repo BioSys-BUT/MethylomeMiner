@@ -150,6 +150,17 @@ def check_and_fix_gff(gff_file):
 
 
 def pair_bed_and_annot_files(bed_dir, annot_dir):
+    """
+    Find matching pairs of bedMethyl and annotation files based on their name
+
+    Match is found based on the prefix of the files. Prefix is every character in front of the first underscore '_'
+    character.
+
+    :param bed_dir: Path to a directory with bedMethyl files.
+    :param annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :rtype dict:
+    :return: Prefix oriented dictionary contains a pair of Paths to bedMethyl file and genome annotation file.
+    """
     bed_files = list(Path(bed_dir).glob("*.bed"))
     annot_gff_files = list(Path(annot_dir).glob("*.gff"))
     annot_gbk_files = list(Path(annot_dir).glob("*.gbk"))
@@ -166,5 +177,5 @@ def pair_bed_and_annot_files(bed_dir, annot_dir):
     for prefix, bed_file in bed_group.items():
         if prefix in annot_group:
             paired_files[prefix] = {"bed_file": bed_file, "annot_file": annot_group[prefix]}
-
-    return paired_files
+    if paired_files:
+        return paired_files
