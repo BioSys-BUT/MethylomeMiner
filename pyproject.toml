@@ -1,15 +1,30 @@
 [project]
 name = "methylome_miner"
-version = "1.1.1"
-description = "Mine methylations from BED files"
+version = "1.1.2"
+authors = [
+    { name="Marketa Jakubickova", email="jakubickova@vut.cz" },
+    { name="Katerina Sabatova", email="sabatovak@vut.cz" },
+    { name="Michaela Zbudilova" },
+    { name="Matej Bezdicek" },
+    { name="Martina Lengerova" },
+    { name="Helena Vitkova"},
+]
+description = "A tool for handling DNA methylation data in bedMethyl format obtained from the nanopore sequencing data by Dorado and Modkit."
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1",
-    "pandas",
-    "biopython",
-    "bcbio-gff",
-    "pyarrow"
+    "pandas>=2.2.3",
+    "biopython>=1.84",
+    "bcbio-gff>=0.7.1",
+    "pyarrow>=18.1.0"
 ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "GPL-3.0-or-later"
+license-files = ["LICEN[CS]E*"]
 
 [project.scripts]
 MethylomeMiner = "methylome_miner.methylome_miner:mine_methylations"
@@ -18,3 +33,7 @@ CoreMethylomeMiner = "methylome_miner.methylome_miner:mine_core_methylations"
 [build-system]
 requires = ["flit_core<4"]
 build-backend = "flit_core.buildapi"
+
+[project.urls]
+Homepage = "https://github.com/BioSys-BUT/MethylomeMiner"
+Issues = "https://github.com/BioSys-BUT/MethylomeMiner/issues"
