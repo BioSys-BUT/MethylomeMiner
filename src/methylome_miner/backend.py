@@ -401,8 +401,10 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                     non_coding_df_part = non_coding_df[non_coding_df["reference_seq"] == ref_seq]
                     new_annot_df_part = new_annot_df[new_annot_df["record_id"] == ref_seq]
 
-                    write_df_to_file(coding_df_part, file_path.with_stem(file_path.stem + f"_{ref_seq}_coding.csv"))
-                    write_df_to_file(non_coding_df_part, file_path.with_stem(file_path.stem + f"_{ref_seq}_non_coding.csv"))
+                    write_df_to_file(coding_df_part, file_path.with_stem(
+                        file_path.stem + f"_{ref_seq}_coding.csv"))
+                    write_df_to_file(non_coding_df_part, file_path.with_stem(
+                        file_path.stem + f"_{ref_seq}_non_coding.csv"))
                     write_df_to_file(new_annot_df_part, file_path.with_stem(
                         file_path.stem + f"_{ref_seq}_all_annot_with_methylations.csv"))
 
