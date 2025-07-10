@@ -10,13 +10,19 @@ import pandas as pd
 from .loading import METHYLATIONS_KEY, parse_bed_file, parse_annotation_file, pair_bed_and_annot_files
 
 
+FILTERED_BED_FILE_NAME = "filtered"
+CODING_METHYLATIONS_FILE_NAME = "coding"
+NON_CODING_METHYLATIONS_FILE_NAME = "non_coding"
+ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME = "all_annot_with_coding_methylations"
+
+
 def calculate_median_coverage(bed_dir_path):
     """
     Calculate median coverage from all available bedMethyl files
 
     :param Path bed_dir_path: Path to a directory with bedMethyl files.
     :rtype: int
-    :return: An integer value of median coverage across all bedMethyl files.
+    :return: An integer value of median coverage across all bedMethyl files in input directory.
     """
     bed_files = list(bed_dir_path.glob("*.bed"))
 
@@ -37,10 +43,10 @@ def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_perc
 
     Median coverage is calculated from all available bedMethyl files, if minimum coverage is not provided.
 
-    :param Path bed_file_path: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path bed_file_path: Path to a bedMethyl file with genome-wide single-base methylation data.
     :param Path bed_dir_path: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param float min_percent_modified: A minimum percent of modified base occurrence.
+    :param float min_percent_modified: Minimum required percentage of reads supporting base modification.
     :rtype: pd.DataFrame
     :return: Filtered bedMethyl table
     """
@@ -182,7 +188,7 @@ def add_coding_to_annot(annot, methylations_df=None):
     Add coding base modifications to annotation as a new columns (one column per modification type)
 
     :param pd.DataFrame annot: Table with annotation.
-    :param methylations_df: Table of coding base modifications.
+    :param pd.DataFrame methylations_df: Table of coding base modifications.
     :rtype pd.DataFrame:
     :return: Table with annotation and coding base modifications.
     """
@@ -296,7 +302,7 @@ def sort_methylations(bed_df, annot_df):
     Sort base modifications according to annotation consecutively by reference sequence name and strand.
 
     :param pd.DataFrame bed_df: Table of base modifications.
-    :param annot_df: Table with annotation.
+    :param pd.DataFrame annot_df: Table with annotation.
     :rtype (pd.DataFrame, pd.DataFrame, pd.DataFrame):
     :return: coding_df, non_coding_df, new_annot_df
 
@@ -313,13 +319,18 @@ def sort_methylations(bed_df, annot_df):
     all_non_coding = []
     new_annots = []
     # Get all base modifications present the bedMethyl table
-    methylation_types = ["m" + cat for cat in bed_df["modified_base_code"].astype("category").cat.categories]
+    methylation_types = sorted(bed_df["modified_base_code"].cat.categories)
+    # Add 'm' to the start of new column names (methylations types)
+    # Have to by done, because of itertuples method, that create a Pandas object, where column names cannot start
+    # with a number.
+    methylation_types_edited = ["m" + cat for cat in methylation_types]
 
     # Go through each group and sort modifications
     for group, bed_df_group in bed_df_grouped:
         # Add new columns named after base modifications to annotation
         annot_df_group = annot_df_grouped.get_group(group)
-        annot_df_group = pd.concat([annot_df_group, pd.DataFrame(columns=methylation_types, dtype="object")])
+        annot_df_group = annot_df_group.reindex(columns=annot_df_group.columns.to_list() + methylation_types_edited)
+        # annot_df_group = pd.concat([annot_df_group, pd.DataFrame(columns=methylation_types, dtype="object")])
 
         coding_df, non_coding_df, new_annot_df = sort_coding_non_coding_methylations(bed_df_group, annot_df_group)
 
@@ -345,11 +356,11 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
     (modification is within coding region) and non-coding (modification is in intergenic region) groups.
 
 
-    :param Path input_bed_file: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path input_bed_file: Path to a bedMethyl file with genome-wide single-base methylation data.
     :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param Path work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
@@ -382,7 +393,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
 
         # Save filtered bedMethyl table if requested
         if write_filtered_bed:
-            bed_file_path = file_path.with_stem(file_path.stem + f"_filtered.{filtered_bed_format}")
+            bed_file_path = file_path.with_stem(file_path.stem + f"_{FILTERED_BED_FILE_NAME}.{filtered_bed_format}")
             write_df_to_file(filtered_bed_df, bed_file_path)
 
         # Parse genome annotation file
@@ -391,6 +402,9 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
 
             # According to annotation sort modifications into coding and non-coding groups
             coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
+
+            # Get basic methylations statistics
+            stats_df, ref_seq_stats_df = get_methylations_stats(coding_df, non_coding_df)
 
             # Split outputs by reference sequences from annotation
             if split_by_reference:
@@ -406,21 +420,27 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                     write_df_to_file(non_coding_df_part, file_path.with_stem(
                         file_path.stem + f"_{ref_seq}_non_coding.csv"))
                     write_df_to_file(new_annot_df_part, file_path.with_stem(
-                        file_path.stem + f"_{ref_seq}_all_annot_with_methylations.csv"))
+                        file_path.stem + f"_{ref_seq}_all_annot_with_coding_methylations.csv"))
 
             else:
                 # Store all results
                 if write_all:
-                    write_df_to_file(coding_df, file_path.with_stem(file_path.stem + "_coding.csv"))
-                    write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem + "_non_coding.csv"))
+                    write_df_to_file(coding_df, file_path.with_stem(file_path.stem +
+                                                                    f"_{CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem +
+                                                                        f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
                 # Write always because of core methylome
-                write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem + "_all_annot_with_methylations.csv"))
+                write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem +
+                                                                   f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
+            write_df_to_file(stats_df, file_path.with_stem(file_path.stem + f"_methylations_statistics.csv"))
+            write_df_to_file(ref_seq_stats_df, file_path.with_stem(file_path.stem + f"_methylations_statistics_per_reference_sequence.csv"))
     print("Methylome mining done.")
     return new_annot_df
 
 
 def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
     """
+    Create pan methylome for all base modification types
 
     :param Path roary_output_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param Path miner_output_dir: Path to directory for (Core)MethylomeMiner outputs.
@@ -439,7 +459,7 @@ def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
     core_methylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
     
     # Fill DataFrames based on results from MethylomeMiner, specifically files with extended annotation
-    for annot_df_file in list(Path(miner_output_dir).glob("*_all_annot_with_methylations.csv")):
+    for annot_df_file in list(Path(miner_output_dir).glob(f"*_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv")):
         
         annot_df = pd.read_csv(annot_df_file)
         
@@ -490,7 +510,7 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
     :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for 
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
          locations of base modifications within a core gene. Default is 'presence' option.
@@ -506,11 +526,15 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
 
     for prefix, files in files_pairs.items():
         # Check if it is necessary to run MethylomeMiner
-        if ((write_all_results and (not Path(work_dir, prefix + "_coding.csv").exists() or
-                                    not Path(work_dir, prefix + "_non_coding.csv").exists() or
-                                    not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists() or
-                                    not Path(work_dir, prefix + "_filtered.csv").exists())
-        ) or (not write_all_results and not Path(work_dir, prefix + "_all_annot_with_methylations.csv").exists())):
+        if ((write_all_results and (
+                not Path(work_dir, prefix + f"_{CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{FILTERED_BED_FILE_NAME}.csv").exists()
+        )) or (
+                not write_all_results and
+                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists()
+        )):
             # Before running MethylomeMiner, check is minimum coverage was set, if not calculate median coverage
             # and use it for filtration
             if min_coverage is None:
@@ -542,3 +566,43 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
             write_df_to_file(methylome, Path(work_dir, methylation + "_core_methylome_" + matrix_values + ".csv"))
 
     print("Core methylome mining done.")
+
+
+def get_methylations_stats(coding_df, non_coding_df):
+
+    # S5
+    coding_stats = coding_df["modified_base_code"].value_counts()
+    non_coding_stats = non_coding_df["modified_base_code"].value_counts()
+
+    methylations = sorted(set(coding_df["modified_base_code"].unique()).union(non_coding_df["modified_base_code"].unique()))
+    ref_seqs = sorted(set(coding_df["reference_seq"].unique()).union(non_coding_df["reference_seq"].unique()))
+
+    stats = {}
+    total_count = 0
+    for methylation in methylations:
+        stats[f"{methylation}_coding_count"] = coding_stats[methylation]
+        stats[f"{methylation}_non_coding_count"] = non_coding_stats[methylation]
+        stats[f"{methylation}_total_count"] = coding_stats[methylation] + non_coding_stats[methylation]
+        total_count = total_count + stats[f"{methylation}_total_count"]
+    stats["total_count"] = total_count
+    stats_df = pd.DataFrame([stats])
+
+    # S6
+    ref_seq_coding_stats = coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
+    ref_seq_non_coding_stats = non_coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
+
+    ref_seq_stats = []
+    for ref_seq in ref_seqs:
+        row = {"reference_seq": ref_seq}
+        total_count = 0
+        for methylation in methylations:
+            row[f"{methylation}_coding_count"] = ref_seq_coding_stats[ref_seq][methylation]
+            row[f"{methylation}_non_coding_count"] = ref_seq_non_coding_stats[ref_seq][methylation]
+            row[f"{methylation}_total_count"] = ref_seq_coding_stats[ref_seq][methylation] + ref_seq_non_coding_stats[ref_seq][methylation]
+            total_count = total_count + row[f"{methylation}_total_count"]
+        row["total_count"] = total_count
+        ref_seq_stats.append(row)
+
+    ref_seq_stats_df = pd.DataFrame(ref_seq_stats)
+
+    return stats_df, ref_seq_stats_df

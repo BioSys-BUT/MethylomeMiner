@@ -1,5 +1,5 @@
 """
-MethylomeMiner module contains functions to run the tool to filter, sort methylations and create core methylome
+MethylomeMiner module contains functions to run the tool to filter, sort methylations and create panmethylome
 """
 from pathlib import Path
 
@@ -38,7 +38,7 @@ class Mutex(click.Option):
     "--input_bed_file",
     required=True,
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, path_type=Path),
-    help="Path to a bedMethyl file with information about modified and unmodified bases.",
+    help="Path to a bedMethyl file with genome-wide single-base methylation data.",
 )
 @click.option(
     "--input_annot_file",
@@ -63,7 +63,7 @@ class Mutex(click.Option):
 @click.option(
     "--min_percent_modified",
     required=False, default=90, type=click.FloatRange(0, 100),
-    help="A minimum percent of modified base occurrence.\n"
+    help="Minimum required percentage of reads supporting base modification.\n"
          "A float value between 0 and 100 inclusive. Default value is 90 %.",
 )
 @click.option(
@@ -93,7 +93,7 @@ class Mutex(click.Option):
 @click.option(
     "--split_by_reference",
     required=False, is_flag=True,
-    help="Write all outputs to separate files based on reference sequence (contig, chromosome, plasmid, etc.).",
+    help="Write all outputs (except for filtered bedMethyl file) to separate files based on reference sequence.",
 )
 def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
                       work_dir, file_name, write_filtered_bed, filtered_bed_format, split_by_reference):
@@ -105,11 +105,11 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     (modification is within coding region) and non-coding (modification is in intergenic region) groups.
 
 
-    :param Path input_bed_file: Path to a bedMethyl file with information about modified and unmodified bases.
+    :param Path input_bed_file: Path to a bedMethyl file with genome-wide single-base methylation data.
     :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param Path work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
@@ -150,7 +150,7 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 @click.option(
     "--min_percent_modified",
     required=False, default=90, type=click.FloatRange(0, 100),
-    help="A minimum percent of modified base occurrence.\n"
+    help="Minimum required percentage of reads supporting base modification.\n"
          "This option is used only if MethylomeMiner was not previously used for input bedMethyl files"
          "and the results are not present in the 'work_dir' folder.\n"
          "A float value between 0 and 100 inclusive. Default value is 90 %.",
@@ -186,7 +186,7 @@ def mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cover
     :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
-    :param float min_percent_modified: A minimum percent of modified base occurrence. Default: 90
+    :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact
          locations of base modifications within a core gene. Default is 'presence' option.

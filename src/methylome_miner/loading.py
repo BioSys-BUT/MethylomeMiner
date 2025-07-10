@@ -46,9 +46,11 @@ ANNOTATION_STRUCTURE = {
 
 def parse_bed_file(bed_file_path):
     """
-    Check structure of bedmethyl file
-    :param bed_file_path:
-    :return:
+    Check structure of bedMethyl file and load the content
+
+    :param Path bed_file_path: Path to a bedMethyl file with genome-wide single-base methylation data.
+    :rtype pd.DataFrame:
+    :return: Loaded extended bedMethyl table.
     """
     bed_df_part1 = pd.read_csv(bed_file_path, sep="\t", header=None, engine="pyarrow")
     if bed_df_part1.shape[1] != 10:
