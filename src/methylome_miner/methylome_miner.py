@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from .backend import _mine_methylations, _mine_core_methylations
+from .backend import _mine_methylations, _mine_panmethylations
 
 
 class Mutex(click.Option):
@@ -158,40 +158,43 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 @click.option(
     "--matrix_values",
     required=False, default="presence",
-    help="Type of values in the output core methylome matrix.\n"
+    help="Format of values in the output panmethylome matrix.\n"
          "Options:\n"
-         "'presence': '0' value for no detected base modifications, '1' value for detected base modification,\n"
-         "'positions': a list of exact locations of base modifications within a core gene.\n"
+         "'presence': '0' value for no detected base modifications, '1' value for detected base modification,"
+         "no value for missing gene in the corresponding genome,\n"
+         "'positions': a list of genomic positions where base modifications were identified within each pangenome gene"
+         "or no value if the gene is missing in the corresponding genome.\n"
          "Default is 'presence' option.",
 )
 @click.option(
     "--work_dir",
     required=False, default=Path(Path.cwd(), "MethylomeMiner_output"),
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True, path_type=Path),
-    help="Path to directory for MethylomeMiner outputs.\n"
+    help="Path to directory where PanMethylomeMiner will look for results from MethylomeMiner and save all result files.\n"
          "If not provided, 'MethylomeMiner_output' folder will be created in the current working directory.",
 )
 @click.option(
     "--write_all_results",
     required=False, is_flag=True,
     help="Write all results from MethylomeMiner to files: methylations sorted to coding and non-coding groups, "
-         "genome annotation with found methylations in coding regions.\n",
+         "extended genome annotation with methylations located in coding regions, filtered bedMethyl files.\n",
 )
-def mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+def mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
                            matrix_values, work_dir, write_all_results):
     """
-    Create core methylome from bedMethyl files, genome annotation and Roary output.
+    Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
-    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for
+    :param str matrix_values: Type of values in the output panmethylome matrix. Options: 'presence': '0' value for
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact
-         locations of base modifications within a core gene. Default is 'presence' option.
-    :param Path work_dir: Path to directory for (Core)MethylomeMiner outputs. Default: MethylomeMiner_output
-    :param bool write_all_results: Write all results from (Core)MethylomeMiner to files. Default: False
+         locations of base modifications within a panmethylome gene; or no value (NaN) for missing gene
+          in the corresponding genome. Default is 'presence' option.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param bool write_all_results: Write all results from (Pan)MethylomeMiner to files. Default: False
     """
-    _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+    _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
                             matrix_values, work_dir, write_all_results)

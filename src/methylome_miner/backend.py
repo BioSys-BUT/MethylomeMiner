@@ -1,5 +1,5 @@
 """
-Module to filter raw bedMethyl files, store filtered files in various file formats and create core methylome
+Module to filter raw bedMethyl files, store filtered files in various file formats and create panmethylome
 """
 
 from pathlib import Path
@@ -429,7 +429,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                                                                     f"_{CODING_METHYLATIONS_FILE_NAME}.csv"))
                     write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem +
                                                                         f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
-                # Write always because of core methylome
+                # Write always because of panmethylome
                 write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem +
                                                                    f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
             write_df_to_file(stats_df, file_path.with_stem(file_path.stem + f"_methylations_statistics.csv"))
@@ -438,25 +438,25 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
     return new_annot_df
 
 
-def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
+def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
     """
     Create pan methylome for all base modification types
 
     :param Path roary_output_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
-    :param Path miner_output_dir: Path to directory for (Core)MethylomeMiner outputs.
-    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for 
+    :param Path miner_output_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param str matrix_values: Type of values in the output panmethylome matrix. Options: 'presence': '0' value for
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
-         locations of base modifications within a core gene. Default is 'presence' option.
+         locations of base modifications within a pangenome genes. Default is 'presence' option.
     :rtype dict:
     :return: Dictionary with keys corresponding to found modification types and values are DataFrames, where rows
-         are core genes according to Roary and columns are analyzed genomes. Values in the DataFrame are as requested
-         through `matrix_values` parameter.
+         are pangenome genes according to Roary and columns are analyzed genomes. Values in the DataFrame are
+         as requested through `matrix_values` parameter.
     """
     # Load results from Roary
     roary_df = pd.read_csv(roary_output_file)
     
     # Prepare output dictionary with DataFrames 
-    core_methylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
+    panmethylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
     
     # Fill DataFrames based on results from MethylomeMiner, specifically files with extended annotation
     for annot_df_file in list(Path(miner_output_dir).glob(f"*_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv")):
@@ -466,10 +466,10 @@ def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
         methylation_types = annot_df.iloc[:, 7:].columns
         genome_name_abbr = annot_df_file.stem.split("_")[0]
 
-        # For each extended annotation file, add found modifications to correct core gene
-        for methylation, core_methylome in core_methylomes.items():
+        # For each extended annotation file, add found modifications to correct pangenome gene
+        for methylation, panmethylome in panmethylomes.items():
 
-            core_methylome[genome_name_abbr] = pd.Series()
+            panmethylome[genome_name_abbr] = pd.Series()
 
             if methylation in methylation_types:
 
@@ -479,18 +479,18 @@ def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
                     print("Invalid column names in Roary file.")
                     return None
 
-                # Find core genes in the extended annotation
+                # Find pangenome genes in the extended annotation
                 valid_genes = roary_df[col_names[0]][
                     pd.notna(roary_df[col_names[0]]) & roary_df[col_names[0]].isin(annot_df["gene_id"])]
 
-                # Add found base modifications' positions to core genes
-                core_methylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(
+                # Add found base modifications' positions to pangenome genes
+                panmethylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(
                     annot_df.set_index("gene_id")[methylation])
 
                 # Change lists of positions to '0' and '1' values, if requested
                 if matrix_values == "presence":
-                    core_methylome.loc[core_methylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
-                    core_methylome.loc[(core_methylome[genome_name_abbr] != 0) & ~core_methylome[
+                    panmethylome.loc[panmethylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
+                    panmethylome.loc[(panmethylome[genome_name_abbr] != 0) & ~panmethylome[
                         genome_name_abbr].isna(), genome_name_abbr] = 1
                 elif matrix_values == "positions":
                     continue
@@ -498,26 +498,26 @@ def get_core_methylome(roary_output_file, miner_output_dir, matrix_values):
                     print("Invalid matrix values requested. Only 'presence' and 'positions' options are possible.")
                     return None
 
-    return core_methylomes
+    return panmethylomes
 
 
-def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
+def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
                            matrix_values, work_dir, write_all_results):
     """
-    Create core methylome from bedMethyl files, genome annotation and Roary output.
+    Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
-    :param str matrix_values: Type of values in the output core methylome matrix. Options: 'presence': '0' value for 
+    :param str matrix_values: Type of values in the output panmethylome matrix. Options: 'presence': '0' value for
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
-         locations of base modifications within a core gene. Default is 'presence' option.
-    :param Path work_dir: Path to directory for (Core)MethylomeMiner outputs. Default: MethylomeMiner_output
-    :param bool write_all_results: Write all results from (Core)MethylomeMiner to files. Default: False
+         locations of base modifications within a pangenome gene. Default is 'presence' option.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs. Default: MethylomeMiner_output
+    :param bool write_all_results: Write all results from (Pan)MethylomeMiner to files. Default: False
     """
-    print("Core methylome mining started.")
+    print("Panmethylome mining started.")
 
     # For each input bed file find matching annotation file based on the prefix in the name of the files
     files_pairs = pair_bed_and_annot_files(input_bed_dir, input_annot_dir)
@@ -557,15 +557,15 @@ def _mine_core_methylations(input_bed_dir, input_annot_dir, roary_file, min_cove
                 split_by_reference=False,
             )
 
-    # Create core methylomes for all present base modifications
-    core_methylomes = get_core_methylome(roary_file, miner_output_dir=work_dir, matrix_values=matrix_values)
+    # Create panmethylomes for all present base modifications
+    panmethylomes = get_panmethylome(roary_file, miner_output_dir=work_dir, matrix_values=matrix_values)
 
     # For each base modification save individual output file
-    for methylation, methylome in core_methylomes.items():
+    for methylation, methylome in panmethylomes.items():
         if not methylome.iloc[:, 1:].isnull().values.all():
-            write_df_to_file(methylome, Path(work_dir, methylation + "_core_methylome_" + matrix_values + ".csv"))
+            write_df_to_file(methylome, Path(work_dir, methylation + "_panmethylome_" + matrix_values + ".csv"))
 
-    print("Core methylome mining done.")
+    print("Panmethylome mining done.")
 
 
 def get_methylations_stats(coding_df, non_coding_df):

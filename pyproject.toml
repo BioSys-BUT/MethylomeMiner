@@ -28,7 +28,7 @@ license-files = ["LICEN[CS]E*"]
 
 [project.scripts]
 MethylomeMiner = "methylome_miner.methylome_miner:mine_methylations"
-CoreMethylomeMiner = "methylome_miner.methylome_miner:mine_core_methylations"
+PanMethylomeMiner = "methylome_miner.methylome_miner:mine_panmethylations"
 
 [build-system]
 requires = ["flit_core<4"]
