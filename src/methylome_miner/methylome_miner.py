@@ -179,8 +179,31 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     help="Write all results from MethylomeMiner to files: methylations sorted to coding and non-coding groups, "
          "extended genome annotation with methylations located in coding regions, filtered bedMethyl files.\n",
 )
+@click.option(
+    "--heatmap_type",
+    required=False, default=None,
+    help="Choose which heatmap(s) of panmethylome should be created.\n"
+         "Options:\n"
+         "'compact': heatmap of panmethylome in lower resolution without genes' names,\n"
+         "'full': heatmap of panmethylome in full resolution with genes' names,\n"
+         "'both': both 'compact' and 'full' heatmaps are created.\n"
+         "Default behaviour is not to create a heatmap. Heatmaps are created only if matrix values are set to 'presence.'",
+)
+@click.option(
+    "--heatmap_file_format",
+    required=False, default="png",
+    help="Set file format of heatmap(s).\n"
+         "Default is 'png'.",
+)
+@click.option(
+    "--heatmap_min_percent_presence",
+    required=False, default=95, type=click.FloatRange(0, 100),
+    help="Minimum required percentage of genomes where are genes present.\n"
+         "Default is 95 %."
+)
 def mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
-                           matrix_values, work_dir, write_all_results):
+                         matrix_values, work_dir, write_all_results, heatmap_type, heatmap_file_format,
+                         heatmap_min_percent_presence):
     """
     Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
@@ -190,11 +213,18 @@ def mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverag
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param str matrix_values: Type of values in the output panmethylome matrix. Options: 'presence': '0' value for
-         no detected base modifications, '1' value for detected base modification, 'positions': a list of exact
-         locations of base modifications within a panmethylome gene; or no value (NaN) for missing gene
-          in the corresponding genome. Default is 'presence' option.
+        no detected base modifications, '1' value for detected base modification, 'positions': a list of exact
+        locations of base modifications within a panmethylome gene; or no value (NaN) for missing gene
+        in the corresponding genome. Default is 'presence' option.
     :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs. Default: MethylomeMiner_output
     :param bool write_all_results: Write all results from (Pan)MethylomeMiner to files. Default: False
+    :param str heatmap_type: Choose which heatmap(s) should be created (compact, full, both or none).
+        Default: None - no heatmap is created.
+    :param str heatmap_file_format: File format of created heatmap(s). Default: "png".
+    :param float heatmap_min_percent_presence: Minimum required percentage of genomes where are genes present.
     """
     _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
-                            matrix_values, work_dir, write_all_results)
+                          matrix_values, work_dir, write_all_results, heatmap_type, heatmap_file_format,
+                          heatmap_min_percent_presence)
+    # TODO: Heatmap other common options: "pdf", "svg", "jpeg", depending on your system and matplotlib backend support.
+    # TODO: Rework all option choices!!!

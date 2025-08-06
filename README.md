@@ -12,7 +12,7 @@ sequencing data by [Dorado](https://github.com/nanoporetech/dorado) and
 - [Installation](#installation)
 - [Usage](#usage)
   - [MethylomeMiner](#MethylomeMiner)
-  - [PanMethylomeMiner](#pan-methylome-miner)
+  - [PanMethylomeMiner](#PanMethylomeMiner)
 - [Contact](#contact)
 
 ## Features
@@ -38,7 +38,7 @@ MethylomeMiner functionality is divided into two parts. The first part named `Me
 of bedMethyl files, the other, `PanMethylomeMiner`, integrates pangenome analysis with DNA methylation data processed
 by MethylomeMiner to create panmethylome.
 
-### `MethylomeMiner`
+### MethylomeMiner
 
 The primary use of `MethylomeMiner` is to filter out base modifications with low coverage and low probability
 of base modification and to sort methylations into coding and non-coding groups. So-called *coding* methylations are
@@ -200,7 +200,7 @@ If `--split_by_reference` is used flag:
   ```
 
 
-### `PanMethylomeMiner`
+### PanMethylomeMiner
 
 PanMethylomeMiner is designed to integrate the results from MethylomeMiner with pangenome analysis performed by Roary. 
 Its main purpose is to generate a comprehensive panmethylome table, in which each gene from the pangenome is annotated
@@ -288,6 +288,31 @@ This includes:
 * Filtered bedMethyl files after quality thresholds are applied.
 
 Use this option if you want to save full intermediate results.
+
+##### `--heatmap_type`
+Specifies which type of heatmap visualization should be generated from the panmethylome presence matrix.
+Heatmaps are only created if the matrix values (via `--matrix_values)` are set to `presence`.
+
+Options:
+* `compact`: Generates a lower-resolution heatmap without gene names on the y-axis. Suitable for a quick overview across
+  genomes.
+* `full`: Generates a full-resolution heatmap with gene names. This version is more detailed but may result in a large
+  image depending on the number of genes.
+* `both`: Creates both compact and full heatmaps.
+
+If no value is provided, no heatmap will be generated.
+
+##### `--heatmap_file_format`
+Sets the output format for generated heatmap(s). This applies to all generated heatmaps.
+
+Default: `png`
+
+##### `--heatmap_min_percent_presence`
+Sets the minimum percentage of genomes in which a gene must be present in order to be included in the heatmap(s).
+This helps filter out genes that are absent from most genomes. For example `--heatmap_min_percent_presence 90` will
+include only genes present in at least 90 % of genomes. Value 100 % will create heatmap for core genes.
+
+The value is float in the range `<0, 100>` and default is `95`.
 
 
 #### Output files
@@ -392,6 +417,26 @@ in pangenome dataset. Therefore, two CSV files are created:
   ```
 
 * To request all results from MethylomeMiner to be saved to files
+
   ```commandline
   PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --write_all_results
   ```
+
+* To generate 'compact' heatmap in png file format for genes with 95 % presence
+
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --heatmap_type compact
+  ```
+
+* To generate 'full' heatmap in svg file format for genes with 95 % presence
+
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --heatmap_type full --heatmap_file_format svg
+  ```
+
+* To generate 'both' heatmaps (compact and full) in svg file format for genes with 100 % presence in analyzed genomes = core genes
+
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --heatmap_type both --heatmap_file_format svg --heatmap_min_percent_presence 100
+  ```
+

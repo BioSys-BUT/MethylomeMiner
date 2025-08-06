@@ -4,8 +4,14 @@ Module to filter raw bedMethyl files, store filtered files in various file forma
 
 from pathlib import Path
 import statistics
+import sys
 
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import ListedColormap
+import numpy as np
 
 from .loading import METHYLATIONS_KEY, parse_bed_file, parse_annotation_file, pair_bed_and_annot_files
 
@@ -571,7 +577,8 @@ def get_panmethylations_stats(work_dir, prefixes):
 
 
 def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
-                           matrix_values, work_dir, write_all_results):
+                          matrix_values, work_dir, write_all_results, heatmap_type, heatmap_file_format,
+                          heatmap_min_percent_presence):
     """
     Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
@@ -585,6 +592,10 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
          locations of base modifications within a pangenome gene. Default is 'presence' option.
     :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs. Default: MethylomeMiner_output
     :param bool write_all_results: Write all results from (Pan)MethylomeMiner to files. Default: False
+    :param str heatmap_type: Choose which heatmap(s) should be created (compact, full, both or none).
+        Default: None - no heatmap is created.
+    :param str heatmap_file_format: File format of heatmap(s) to be created. Default: 'png'.
+    :param float heatmap_min_percent_presence: Minimum required percentage of genomes where are genes present.
     """
     print("Panmethylome mining started.")
 
@@ -634,12 +645,127 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
     # Create panmethylomes for all present base modifications
     panmethylomes = get_panmethylome(roary_file, miner_output_dir=work_dir, matrix_values=matrix_values)
 
-    # For each base modification save individual output file
-    for methylation, methylome in panmethylomes.items():
-        if not methylome.iloc[:, 1:].isnull().values.all():
-            write_df_to_file(methylome, Path(work_dir, methylation + "_panmethylome_" + matrix_values + ".csv"))
+    # For each base modification save individual output files
+    for methylation, panmethylome in panmethylomes.items():
+        if not panmethylome.iloc[:, 1:].isnull().values.all():
+            # Panmethylome matrix
+            write_df_to_file(panmethylome, Path(work_dir, methylation + "_panmethylome_" + matrix_values + ".csv"))
+            # Heatmap(s)
+            if heatmap_type and matrix_values == "presence":
+                generate_heatmaps(panmethylome, methylation, work_dir, type=heatmap_type, file_format=heatmap_file_format,
+                                  min_percent_presence=heatmap_min_percent_presence)
 
     # Get panmethylome statistics
     get_panmethylations_stats(work_dir, files_pairs.keys())
 
     print("Panmethylome mining done.")
+
+
+def generate_heatmaps(panmethylome_df, methylation, work_dir, type, file_format, min_percent_presence):
+    """
+    Filter panmethylome and create heatmap(s).
+
+    :param pd.DataFrame panmethylome_df: Panmethylome matrix with 'presence' values.
+    :param str methylation: Name of the methylation for which panmethylome was created.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param type: Choose which heatmap(s) of panmethylome should be created.
+        Options:
+         'compact': heatmap of panmethylome in lower resolution without genes' names,
+         'full': heatmap of panmethylome in full resolution with genes' names,
+         'both': both 'compact' and 'full' heatmaps are created.
+    :param str file_format: File format of heatmap(s) to be created.
+    :param float min_percent_presence: Minimum required percentage of genomes where are genes present.
+    """
+    panmethylome_df.index = panmethylome_df["Gene"]
+    panmethylome_df = panmethylome_df.iloc[:, 1:].astype(float)
+
+    min_presence = int(np.floor(panmethylome_df.shape[1] * (min_percent_presence / 100)))
+
+    filtered_panmethylome_df = panmethylome_df[panmethylome_df.notna().sum(axis=1) >= min_presence]
+
+    if filtered_panmethylome_df.empty:
+        print(f"No genes passed the presence threshold ({min_percent_presence}%). Heatmaps will not be generated.")
+        return
+
+    if type == "compact" or type == "full":
+        create_heatmap(filtered_panmethylome_df, methylation, work_dir, type, file_format, min_percent_presence)
+    else:
+        create_heatmap(filtered_panmethylome_df, methylation, work_dir, "compact", file_format, min_percent_presence)
+        create_heatmap(filtered_panmethylome_df, methylation, work_dir, "full", file_format, min_percent_presence)
+
+
+def create_heatmap(filtered_panmethylome_df, methylation, work_dir, type, file_format, min_percent_presence):
+    """
+    Create panmethylome heatmap.
+
+    :param pd.DataFrame filtered_panmethylome_df: Filtered panmethylome matrix based on minimum percent of presence.
+    :param str methylation: Name of the methylation for which panmethylome was created.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param type: Choose which heatmap(s) of panmethylome should be created.
+        Options:
+         'compact': heatmap of panmethylome in lower resolution without genes' names,
+         'full': heatmap of panmethylome in full resolution with genes' names,
+         'both': both 'compact' and 'full' heatmaps are created.
+    :param str file_format: File format of heatmap(s) to be created.
+    :param float min_percent_presence: Minimum required percentage of genomes where are genes present.
+    """
+    sys.setrecursionlimit(4000)
+
+    blue = (0/255, 114/255, 178/255)
+    yellow = (253/255, 179/255, 56/255)
+    gray = (204/255, 204/255, 204/255)
+    cmap = ListedColormap([blue, yellow])
+
+    if type == "compact":
+        bbox_anchor = (1.05, 0.65)
+        figsize = (20, 20)
+        dpi = 150
+        show_y_axis = False
+    else:
+        bbox_anchor = (1.2, 0.65)
+        figsize = (max(10, filtered_panmethylome_df.shape[1] * 0.4), max(10, filtered_panmethylome_df.shape[0] * 0.4))
+        dpi = 300
+        show_y_axis = True
+
+    plt.ioff()
+    sns.set(font_scale=1.2)
+
+    g = sns.clustermap(filtered_panmethylome_df,
+                       metric="hamming",
+                       method="average",
+                       cmap=cmap,
+                       figsize=figsize,
+                       yticklabels=show_y_axis,
+                       xticklabels=True,
+                       cbar_kws={"label": "Methylation"},
+                       mask=filtered_panmethylome_df.isna(),
+                       dendrogram_ratio=(0.1, 0.05))
+
+    g.cax.set_visible(False)
+    g.fig.subplots_adjust(left=0.05, right=0.85)
+
+    legend_elements = [
+        mpatches.Patch(color=blue, label="non-methylated"),
+        mpatches.Patch(color=yellow, label="methylated")
+    ]
+    if min_percent_presence < 100:
+        legend_elements.append(mpatches.Patch(color=gray, label="missing gene"))
+
+    g.ax_heatmap.legend(handles=legend_elements,
+                        loc="center left",
+                        bbox_to_anchor=bbox_anchor,
+                        frameon=False,
+                        fontsize=14)
+
+    g.ax_heatmap.set_xlabel("Genome", fontsize=14, labelpad=10)
+
+    gene_count = filtered_panmethylome_df.shape[0]
+    ylabel_text = f"Genes that are presented at {min_percent_presence}% of the analyzed genomes (n={gene_count})"
+    g.ax_heatmap.set_ylabel(ylabel_text, fontsize=14, labelpad=20)
+
+    if not show_y_axis:
+        g.ax_heatmap.set_yticks([])
+        g.ax_heatmap.set_yticklabels([])
+
+    output_path = Path(work_dir, f"heatmap_{methylation}_{type}.{file_format}")
+    g.savefig(output_path, dpi=dpi, bbox_inches="tight")
