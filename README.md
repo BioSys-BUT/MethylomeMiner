@@ -135,24 +135,33 @@ The output of MethylomeMiner is a set of new files distinguished by file suffixe
   | chromosome_contig_1 | 0792ceb9f153a28951804de2a656f49c_5 | 6365  | 7178 | +      | sugar-phosphatase                              | WP_015369035.1 sugar-phosphatase (Klebsiella aerogenes) [pid:94.8%, q_cov:100.0%, s_cov:100.0%, Eval:1.3e-142]                            | []  | [6857]                                                       | [6696, 6801, 6809, 7023]                               |
   | ...                 |
 
-* `methylations_statistics.csv` - table of filtered methylation counts.
+* `_methylations_statistics.csv` - table of filtered methylation counts showing the number of methylation sites detected
+  in coding and non-coding regions, along with their totals and the overall number of methylations
 
-  | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
-  |------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
-  | 38               | 36                   | 74              | 9425             | 10809                | 20234           | 15797            | 16386                | 32183           | 52491       |
+  | genome | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
+  |--------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
+  | KP825  | 38               | 36                   | 74              | 9425             | 10809                | 20234           | 15797            | 16386                | 32183           | 52491       |
 
-* `methylations_statistics_per_reference_sequence.csv`
+* `_methylations_statistics_per_ref.csv` - as above, but the counts are divided according to reference
+  sequences in the annotation
 
-  | reference_seq       | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
-  |---------------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
-  | chromosome_contig_1 | 33               | 33                   | 66              | 8874             | 10033                | 18907           | 14967            | 15399                | 30366           | 49339       |
-  | plasmid_contig_2    | 2                | 1                    | 3               | 252              | 333                  | 585             | 418              | 459                  | 877             | 1465        |
-  | plasmid_contig_3    | 3                | 2                    | 5               | 299              | 443                  | 742             | 412              | 528                  | 940             | 1687        |
+  | genome | reference_seq       | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
+  |--------|---------------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
+  | KP825  | chromosome_contig_1 | 33               | 33                   | 66              | 8874             | 10033                | 18907           | 14967            | 15399                | 30366           | 49339       |
+  | KP825  | plasmid_contig_2    | 2                | 1                    | 3               | 252              | 333                  | 585             | 418              | 459                  | 877             | 1465        |
+  | KP825  | plasmid_contig_3    | 3                | 2                    | 5               | 299              | 443                  | 742             | 412              | 528                  | 940             | 1687        |
 
 * `_filtered.*` - optional, filtered bedMethyl table in CSV, TSV, JSON or BED format.
 
+If `--split_by_reference` is used flag:
+* `_coding.csv` file is replaced by `<reference sequence 1>_coding.csv`, `<reference sequence 2>_coding.csv` etc. for
+  each reference sequence present in the annotation file
+* `_non_coding.csv` file is replaced by `<reference sequence 1>_non_coding.csv`, `<reference sequence 2>_non_coding.csv`
+  etc. for each reference sequence present in the annotation file
+
+
 #### Examples
-* To run`MethylomeMiner with minimum coverage not specified, but instead path to directory with bedMethyl files is
+* To run MethylomeMiner with minimum coverage not specified, but instead path to directory with bedMethyl files is
   provided and minimum coverage is calculated as a median coverage value from all bedMethyl files
   in the directory:
 
@@ -166,13 +175,13 @@ The output of MethylomeMiner is a set of new files distinguished by file suffixe
   MethylomeMiner --input_bed_file input_files\KP825_4mC_5mC_6mA_calls.bed --input_annot_file input_files\KP825_genome.gff --min_coverage 36 --min_percent_modified 95
   ```
   
-* To setup working directory and custom name for output files:
+* To set up working directory and custom name for output files:
 
   ```commandline
   MethylomeMiner --input_bed_file input_files\KP825_4mC_5mC_6mA_calls.bed --input_annot_file input_files\KP825_genome.gff --min_coverage 36 --work_dir path\to\output_dir --file_name output_file_name_prefix
   ```
 
-* To write filtered bedMethyl table to default csv file:
+* To write filtered bedMethyl table to default CSV file:
 
   ```commandline
   MethylomeMiner --input_bed_file input_files\KP825_4mC_5mC_6mA_calls.bed --input_annot_file input_files\KP825_genome.gff --write_filtered_bed
@@ -203,20 +212,44 @@ The basic command to run `PanMethylomeMiner` from command line is following:
 PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv
 ```
 
+PanMethylomeMiner uses MethylomeMiner to process all input files (bedMethyl and annotation files).
+Therefore, some parameters in PanMethylomeMiner are similar to those in MethylomeMiner, allowing control over its 
+internal settings.
 
+In the basic use case, MethylomeMiner filters base modifications using a default threshold of 90% for the minimum 
+percentage of modified reads. The threshold for minimum coverage is automatically set to the median value calculated
+from all bedMethyl files provided via the `--input_bed_dir` parameter.
 
 #### Required parameters
 ##### `--input_bed_dir`
-Path to a directory with bedMethyl files, which should be connected to pangenome analysis.
+Path to a directory with bedMethyl files, which should be integrated into pangenome analysis.
 
 ##### `--input_annot_dir`
 Path to a directory with annotation files, that were used as input into pangenome analysis. Genome annotations could be
-in `.gff` (v3) or `.gbk` file format.
+in `.gff` (v3) or `.gbk` file format, but the locus tags for individual CDS have been renamed to correspond with 
+the gene names used in the Roary output.
+
+> **Important note:**
+> 
+> PanMethylomeMiner pairs bedMethyl and annotation files according to the file names, more precisely by a prefix.
+> In this case, a prefix is every character in front of the first underscore `_` character. This prefix is later used
+> to distinguish the individual genomes in the pangenome analysis.
+> 
+> Make sure the files are named accordingly, for example:
+> 
+> | prefix   | bedMethyl file                 | annotation file     |
+> |----------|--------------------------------|---------------------|
+> | `KP825`  | `KP825_4mC_5mC_6mA_calls.bed`  | `KP825_genome.gff`  |
+> | `KP1651` | `KP1651_4mC_5mC_6mA_calls.bed` | `KP1651_genome.gff` |
+> | `KP1824` | `KP1824_4mC_5mC_6mA_calls.bed` | `KP1824_genome.gff` |
+>
+
 
 ##### `--roary_file`
 Path to output file from Roary tool named `gene_presence_absence.csv`.
 
-#### Optional parameteres
+
+#### Optional parameters
 ##### `--min_coverage`
 Sets minimum (as integer value) required read coverage for a base modification to be retained.
 This option is only used if MethylomeMiner was not previously run for the input bedMethyl files
@@ -234,7 +267,7 @@ Defines the format of values used in the output panmethylome matrix.
 
 Options:
 * `presence`: `0` for no detected base modification, `1` for detected base modification, no value for missing gene
-  in the corresponding genome,.
+  in the corresponding genome.
 * `positions`: A list of genomic positions where base modifications were identified within each pangenome gene
   or no value for missing gene in the corresponding genome.
 
@@ -308,4 +341,57 @@ Example: `5mC_panmethylome_positions.csv`
 | ...        |
 
 
+##### Statistics
+Additionally, methylation statistics from MethylomeMiner are merged to provide an overview across all genomes
+in pangenome dataset. Therefore, two CSV files are created:
+
+* `all_methylations_statistics.csv` - table of filtered methylation counts showing the number of methylation sites
+  detected in coding and non-coding regions, along with their totals and the overall number of methylations
+
+  | genome | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
+  |--------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
+  | KP1248 | 20               | 18                   | 38              | 6860             | 7973                 | 14833           | 11027            | 11756                | 22783           | 37654       |
+  | KP1267 | 113              | 141                  | 254             | 17397            | 20724                | 38121           | 28528            | 30944                | 59472           | 97847       |
+  | KP1344 | 6                | 15                   | 21              | 3651             | 4483                 | 8134            | 5799             | 6805                 | 12604           | 20759       |
+
+
+* `all_methylations_statistics_per_ref.csv` - as above, but the counts are divided according to reference
+  sequences in the annotation
+
+  | genome | reference_seq       | 4mC_coding_count | 4mC_non_coding_count | 4mC_total_count | 5mC_coding_count | 5mC_non_coding_count | 5mC_total_count | 6mA_coding_count | 6mA_non_coding_count | 6mA_total_count | total_count |
+  |--------|---------------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|------------------|----------------------|-----------------|-------------|
+  | KP825  | chromosome_contig_1 | 33               | 33                   | 66              | 8874             | 10033                | 18907           | 14967            | 15399                | 30366           | 49339       |
+  | KP825  | plasmid_contig_2    | 2                | 1                    | 3               | 252              | 333                  | 585             | 418              | 459                  | 877             | 1465        |
+  | KP825  | plasmid_contig_3    | 3                | 2                    | 5               | 299              | 443                  | 742             | 412              | 528                  | 940             | 1687        |
+  | KP1248 | chromosome_contig_1 | 19               | 17                   | 36              | 6482             | 7474                 | 13956           | 10514            | 11148                | 21662           | 35654       |
+  | KP1248 | plasmid_contig_2    | 0                | 1                    | 1               | 119              | 141                  | 260             | 152              | 197                  | 349             | 610         |
+  | KP1248 | plasmid_contig_3    | 1                | 0                    | 1               | 259              | 358                  | 617             | 361              | 411                  | 772             | 1390        |
+  | KP1267 | chromosome_contig_1 | 112              | 138                  | 250             | 16958            | 20098                | 37056           | 27883            | 30075                | 57958           | 95264       |
+  | KP1267 | plasmid_contig_2    | 1                | 3                    | 4               | 439              | 626                  | 1065            | 645              | 869                  | 1514            | 2583        |
+  | KP1344 | chromosome_contig_3 | 6                | 13                   | 19              | 3332             | 4046                 | 7378            | 5329             | 6255                 | 11584           | 18981       |
+  | KP1344 | plasmid_contig_1    | 0                | 2                    | 2               | 319              | 437                  | 756             | 470              | 550                  | 1020            | 1778        |
+
+
 #### Examples
+* To run set custom filtering thresholds for MethylomeMiner
+  
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --min_coverage 36 --min_percent_modified 95
+  ```
+
+* To change type of values in panmethylome matrix to `positions`
+  
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --matrix_values positions
+  ```
+
+* To set up working directory
+  
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --work_dir path\to\output_dir
+  ```
+
+* To request all results from MethylomeMiner to be saved to files
+  ```commandline
+  PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --write_all_results
+  ```
