@@ -14,6 +14,8 @@ FILTERED_BED_FILE_NAME = "filtered"
 CODING_METHYLATIONS_FILE_NAME = "coding"
 NON_CODING_METHYLATIONS_FILE_NAME = "non_coding"
 ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME = "all_annot_with_coding_methylations"
+STATS_FILE_NAME = "methylations_statistics"
+STATS_REF_SEQS_FILE_NAME = "methylations_statistics_per_ref"
 
 
 def calculate_median_coverage(bed_dir_path):
@@ -345,6 +347,54 @@ def sort_methylations(bed_df, annot_df):
     return all_coding_df, all_non_coding_df, new_annot_df
 
 
+def get_methylations_stats(coding_df, non_coding_df, file_path):
+    """
+    Get counts statistics per methylation types and per reference sequence in annotation
+
+    :param pd.DataFrame coding_df: Table of all coding modifications with coding feature annotation.
+    :param pd.DataFrame non_coding_df: Table of all non-coding modifications with coding feature annotation.
+    :param Path file_path: Path of output files of MethylomeMiner
+    """
+
+    # Counts statistics per methylation type
+    coding_stats = coding_df["modified_base_code"].value_counts()
+    non_coding_stats = non_coding_df["modified_base_code"].value_counts()
+
+    methylations = sorted(set(coding_df["modified_base_code"].unique()).union(non_coding_df["modified_base_code"].unique()))
+    ref_seqs = sorted(set(coding_df["reference_seq"].unique()).union(non_coding_df["reference_seq"].unique()))
+
+    stats = {"genome": file_path.stem}
+    total_count = 0
+    for methylation in methylations:
+        stats[f"{methylation}_coding_count"] = coding_stats[methylation]
+        stats[f"{methylation}_non_coding_count"] = non_coding_stats[methylation]
+        stats[f"{methylation}_total_count"] = coding_stats[methylation] + non_coding_stats[methylation]
+        total_count = total_count + stats[f"{methylation}_total_count"]
+    stats["total_count"] = total_count
+    stats_df = pd.DataFrame([stats])
+
+    # Count statistics per methylation type and per reference sequence in annotation
+    ref_seq_coding_stats = coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
+    ref_seq_non_coding_stats = non_coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
+
+    ref_seq_stats = []
+    for ref_seq in ref_seqs:
+        row = {"genome": file_path.stem, "reference_seq": ref_seq}
+        total_count = 0
+        for methylation in methylations:
+            row[f"{methylation}_coding_count"] = ref_seq_coding_stats[ref_seq][methylation]
+            row[f"{methylation}_non_coding_count"] = ref_seq_non_coding_stats[ref_seq][methylation]
+            row[f"{methylation}_total_count"] = ref_seq_coding_stats[ref_seq][methylation] + ref_seq_non_coding_stats[ref_seq][methylation]
+            total_count = total_count + row[f"{methylation}_total_count"]
+        row["total_count"] = total_count
+        ref_seq_stats.append(row)
+    ref_seq_stats_df = pd.DataFrame(ref_seq_stats)
+
+    # Write statistics to CSV files
+    write_df_to_file(stats_df, file_path.with_stem(file_path.stem + f"_{STATS_FILE_NAME}.csv"))
+    write_df_to_file(ref_seq_stats_df, file_path.with_stem(file_path.stem + f"_{STATS_REF_SEQS_FILE_NAME}.csv"))
+
+
 def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
                        work_dir, file_name, write_filtered_bed, filtered_bed_format, split_by_reference,
                        write_all=True):
@@ -404,7 +454,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
             coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, annot_df)
 
             # Get basic methylations statistics
-            stats_df, ref_seq_stats_df = get_methylations_stats(coding_df, non_coding_df)
+            get_methylations_stats(coding_df, non_coding_df, file_path)
 
             # Split outputs by reference sequences from annotation
             if split_by_reference:
@@ -432,15 +482,14 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                 # Write always because of panmethylome
                 write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem +
                                                                    f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
-            write_df_to_file(stats_df, file_path.with_stem(file_path.stem + f"_methylations_statistics.csv"))
-            write_df_to_file(ref_seq_stats_df, file_path.with_stem(file_path.stem + f"_methylations_statistics_per_reference_sequence.csv"))
+
     print("Methylome mining done.")
     return new_annot_df
 
 
 def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
     """
-    Create pan methylome for all base modification types
+    Create panmethylome for all base modification types
 
     :param Path roary_output_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param Path miner_output_dir: Path to directory for (Pan)MethylomeMiner outputs.
@@ -458,7 +507,7 @@ def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
     # Prepare output dictionary with DataFrames 
     panmethylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
     
-    # Fill DataFrames based on results from MethylomeMiner, specifically files with extended annotation
+    # Fill DataFrames based on results from MethylomeMiner, more precisely files with extended annotation
     for annot_df_file in list(Path(miner_output_dir).glob(f"*_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv")):
         
         annot_df = pd.read_csv(annot_df_file)
@@ -501,6 +550,26 @@ def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
     return panmethylomes
 
 
+def get_panmethylations_stats(work_dir, prefixes):
+    """
+    Get counts statistics per methylation types and per reference sequence for all genomes in pangenome analysis
+
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param list prefixes: Genomes names derived from file names' prefixes
+    """
+
+    stats = []
+    ref_seq_stats = []
+    for prefix in prefixes:
+        stats.append(pd.read_csv(Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv")))
+        ref_seq_stats.append(pd.read_csv(Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv")))
+    stats_df = pd.concat(stats)
+    ref_seq_stats_df = pd.concat(ref_seq_stats)
+
+    write_df_to_file(stats_df, Path(work_dir, f"all_{STATS_FILE_NAME}.csv"))
+    write_df_to_file(ref_seq_stats_df, Path(work_dir, f"all_{STATS_REF_SEQS_FILE_NAME}.csv"))
+
+
 def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
                            matrix_values, work_dir, write_all_results):
     """
@@ -530,11 +599,16 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
                 not Path(work_dir, prefix + f"_{CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
                 not Path(work_dir, prefix + f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
                 not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{FILTERED_BED_FILE_NAME}.csv").exists()
+                not Path(work_dir, prefix + f"_{FILTERED_BED_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv").exists()
         )) or (
-                not write_all_results and
-                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists()
-        )):
+                not write_all_results and (
+                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv").exists() or
+                not Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv").exists()
+        ))
+        ):
             # Before running MethylomeMiner, check is minimum coverage was set, if not calculate median coverage
             # and use it for filtration
             if min_coverage is None:
@@ -565,44 +639,7 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
         if not methylome.iloc[:, 1:].isnull().values.all():
             write_df_to_file(methylome, Path(work_dir, methylation + "_panmethylome_" + matrix_values + ".csv"))
 
+    # Get panmethylome statistics
+    get_panmethylations_stats(work_dir, files_pairs.keys())
+
     print("Panmethylome mining done.")
-
-
-def get_methylations_stats(coding_df, non_coding_df):
-
-    # S5
-    coding_stats = coding_df["modified_base_code"].value_counts()
-    non_coding_stats = non_coding_df["modified_base_code"].value_counts()
-
-    methylations = sorted(set(coding_df["modified_base_code"].unique()).union(non_coding_df["modified_base_code"].unique()))
-    ref_seqs = sorted(set(coding_df["reference_seq"].unique()).union(non_coding_df["reference_seq"].unique()))
-
-    stats = {}
-    total_count = 0
-    for methylation in methylations:
-        stats[f"{methylation}_coding_count"] = coding_stats[methylation]
-        stats[f"{methylation}_non_coding_count"] = non_coding_stats[methylation]
-        stats[f"{methylation}_total_count"] = coding_stats[methylation] + non_coding_stats[methylation]
-        total_count = total_count + stats[f"{methylation}_total_count"]
-    stats["total_count"] = total_count
-    stats_df = pd.DataFrame([stats])
-
-    # S6
-    ref_seq_coding_stats = coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
-    ref_seq_non_coding_stats = non_coding_df.groupby("reference_seq", observed=False)["modified_base_code"].value_counts()
-
-    ref_seq_stats = []
-    for ref_seq in ref_seqs:
-        row = {"reference_seq": ref_seq}
-        total_count = 0
-        for methylation in methylations:
-            row[f"{methylation}_coding_count"] = ref_seq_coding_stats[ref_seq][methylation]
-            row[f"{methylation}_non_coding_count"] = ref_seq_non_coding_stats[ref_seq][methylation]
-            row[f"{methylation}_total_count"] = ref_seq_coding_stats[ref_seq][methylation] + ref_seq_non_coding_stats[ref_seq][methylation]
-            total_count = total_count + row[f"{methylation}_total_count"]
-        row["total_count"] = total_count
-        ref_seq_stats.append(row)
-
-    ref_seq_stats_df = pd.DataFrame(ref_seq_stats)
-
-    return stats_df, ref_seq_stats_df
