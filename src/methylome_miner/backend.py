@@ -85,22 +85,22 @@ def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_perc
 
 def write_df_to_file(bed_df, file_path):
     """
-    Write pandas DataFrame to file of requested file format (options are '.json', '.csv', '.tsv', '.bed').
+    Write pandas DataFrame to file of requested file format (options are 'json', 'csv', 'tsv', 'bed').
 
     :param pd.DataFrame bed_df: DataFrame to be saved.
     :param Path file_path: Path to new file.
     """
     match file_path.suffix:
-        case ".json":
+        case "json":
             pd.DataFrame.to_json(bed_df, file_path)
-        case ".csv":
+        case "csv":
             bed_df.to_csv(file_path, index=False)
-        case ".tsv":
+        case "tsv":
             bed_df.to_csv(file_path, index=False, sep="\t")
-        case ".bed":
+        case "bed":
             to_bed(bed_df, file_path)
         case _:
-            print("Unsupported file format. Choose from: '.json', '.csv', '.tsv' or '.bed'.")
+            print("Unsupported file format. Choose from: 'json', 'csv', 'tsv' or 'bed'.")
 
 
 def to_bed(bed_df, file_path):
@@ -413,7 +413,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
 
 
     :param Path input_bed_file: Path to a bedMethyl file with genome-wide single-base methylation data.
-    :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :param Path input_annot_file: Path to a file with genome annotation in 'gff' (v3) or 'gbk' file format.
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
@@ -572,8 +572,8 @@ def get_panmethylations_stats(work_dir, prefixes):
     stats_df = pd.concat(stats)
     ref_seq_stats_df = pd.concat(ref_seq_stats)
 
-    write_df_to_file(stats_df, Path(work_dir, f"all_{STATS_FILE_NAME}.csv"))
-    write_df_to_file(ref_seq_stats_df, Path(work_dir, f"all_{STATS_REF_SEQS_FILE_NAME}.csv"))
+    write_df_to_file(stats_df, Path(work_dir, f"panmethylome_statistics.csv"))
+    write_df_to_file(ref_seq_stats_df, Path(work_dir, f"panmethylome_statistics_per_ref.csv"))
 
 
 def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
@@ -583,7 +583,7 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
     Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
-    :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :param Path input_annot_dir: Path to a directory with genome annotations in 'gff' (v3) or 'gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
@@ -767,5 +767,5 @@ def create_heatmap(filtered_panmethylome_df, methylation, work_dir, type, file_f
         g.ax_heatmap.set_yticks([])
         g.ax_heatmap.set_yticklabels([])
 
-    output_path = Path(work_dir, f"heatmap_{methylation}_{type}.{file_format}")
+    output_path = Path(work_dir, f"{methylation}_panmethylome_presence_{type}_heatmap.{file_format}")
     g.savefig(output_path, dpi=dpi, bbox_inches="tight")

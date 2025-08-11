@@ -85,10 +85,11 @@ class Mutex(click.Option):
 )
 @click.option(
     "--filtered_bed_format",
-    required=False,
-    default="csv",
+    required=False, default="csv",
+    type=click.Choice(["json", "csv", "tsv", "bed"], case_sensitive=True),
     help="Choose filtered bedMethyl file format.\n"
-         "Options: 'json', 'csv', 'tsv', 'bed'.\nDefault format is 'csv'.",
+         "Options: 'json', 'csv', 'tsv', 'bed'.\n"
+         "Default format is 'csv'.",
 )
 @click.option(
     "--split_by_reference",
@@ -106,14 +107,14 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 
 
     :param Path input_bed_file: Path to a bedMethyl file with genome-wide single-base methylation data.
-    :param Path input_annot_file: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :param Path input_annot_file: Path to a file with genome annotation in 'gff' (v3) or 'gbk' file format.
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
     :param Path work_dir: Path to directory for MethylomeMiner outputs. Default: MethylomeMiner_output
     :param str file_name: Custom name for MethylomeMiner outputs.
     :param bool write_filtered_bed: Write filtered bedMethyl file to a new file. Default: False
-    :param str filtered_bed_format: File format for filtered bedMethyl file. Default: csv
+    :param str filtered_bed_format: File format for filtered bedMethyl file. Default: 'csv'
     :param bool split_by_reference: Write all outputs to separate files based on reference sequence.
     """
     _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
@@ -131,7 +132,7 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
     "--input_annot_dir",
     required=True,
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True, path_type=Path),
-    help="Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.",
+    help="Path to a directory with genome annotations in 'gff' (v3) or 'gbk' file format.",
 )
 @click.option(
     "--roary_file",
@@ -158,6 +159,7 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 @click.option(
     "--matrix_values",
     required=False, default="presence",
+    type=click.Choice(["presence", "positions"], case_sensitive=True),
     help="Format of values in the output panmethylome matrix.\n"
          "Options:\n"
          "'presence': '0' value for no detected base modifications, '1' value for detected base modification,"
@@ -182,6 +184,7 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 @click.option(
     "--heatmap_type",
     required=False, default=None,
+    type=click.Choice(["compact", "full", "both"], case_sensitive=True),
     help="Choose which heatmap(s) of panmethylome should be created.\n"
          "Options:\n"
          "'compact': heatmap of panmethylome in lower resolution without genes' names,\n"
@@ -191,9 +194,11 @@ def mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cover
 )
 @click.option(
     "--heatmap_file_format",
-    required=False, default="png",
+    required=False, default="pdf",
+    type=click.Choice(["png", "svg", "pdf"], case_sensitive=True),
     help="Set file format of heatmap(s).\n"
-         "Default is 'png'.",
+         "Options: 'png', 'svg', 'pdf'.\n"
+         "Default is 'pdf'.",
 )
 @click.option(
     "--heatmap_min_percent_presence",
@@ -208,7 +213,7 @@ def mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverag
     Create panmethylome from bedMethyl files, genome annotation and Roary output.
 
     :param Path input_bed_dir: Path to a directory with bedMethyl files.
-    :param Path input_annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :param Path input_annot_dir: Path to a directory with genome annotations in 'gff' (v3) or 'gbk' file format.
     :param Path roary_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
     :param int min_coverage: An integer value of minimum coverage for modified position to be kept.
     :param float min_percent_modified: Minimum required percentage of reads supporting base modification. Default: 90
@@ -220,11 +225,9 @@ def mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverag
     :param bool write_all_results: Write all results from (Pan)MethylomeMiner to files. Default: False
     :param str heatmap_type: Choose which heatmap(s) should be created (compact, full, both or none).
         Default: None - no heatmap is created.
-    :param str heatmap_file_format: File format of created heatmap(s). Default: "png".
+    :param str heatmap_file_format: File format of created heatmap(s). Default is 'pdf' format.
     :param float heatmap_min_percent_presence: Minimum required percentage of genomes where are genes present.
     """
     _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_coverage, min_percent_modified,
                           matrix_values, work_dir, write_all_results, heatmap_type, heatmap_file_format,
                           heatmap_min_percent_presence)
-    # TODO: Heatmap other common options: "pdf", "svg", "jpeg", depending on your system and matplotlib backend support.
-    # TODO: Rework all option choices!!!

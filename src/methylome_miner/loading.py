@@ -91,7 +91,7 @@ def parse_annotation_file(annotation_file_path):
     - description of the product of the feature
     - additional notes for the feature
 
-    :param Path annotation_file_path: Path to a file with genome annotation in '.gff' (v3) or '.gbk' file format.
+    :param Path annotation_file_path: Path to a file with genome annotation in 'gff' (v3) or 'gbk' file format.
     :rtype pd.DataFrame:
     :return: Table of genome annotation of CDS
     """
@@ -105,7 +105,7 @@ def parse_annotation_file(annotation_file_path):
                 list_of_records = list(GFF.parse(new_annot_file))
                 custom_qualifier = "ID"
             case _:
-                raise ValueError(f"Invalid file format: {annotation_file_path}. Allowed formats are: '.gbk', '.gff'")
+                raise ValueError(f"Invalid file format: {annotation_file_path}. Allowed formats are: 'gbk', 'gff'")
 
     cds_data = []
     if not list_of_records:
@@ -159,7 +159,7 @@ def pair_bed_and_annot_files(bed_dir, annot_dir):
     character.
 
     :param bed_dir: Path to a directory with bedMethyl files.
-    :param annot_dir: Path to a directory with genome annotations in '.gff' (v3) or '.gbk' file format.
+    :param annot_dir: Path to a directory with genome annotations in 'gff' (v3) or 'gbk' file format.
     :rtype dict:
     :return: Prefix oriented dictionary contains a pair of Paths to bedMethyl file and genome annotation file.
     """
