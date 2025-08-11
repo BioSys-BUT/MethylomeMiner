@@ -14,6 +14,7 @@ sequencing data by [Dorado](https://github.com/nanoporetech/dorado) and
   - [MethylomeMiner](#MethylomeMiner)
   - [PanMethylomeMiner](#PanMethylomeMiner)
 - [Contact](#contact)
+- [License](#license)
 
 ## Features
 
@@ -442,3 +443,10 @@ in pangenome dataset. Therefore, two CSV files are created:
   PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --heatmap_type both --heatmap_file_format svg --heatmap_min_percent_presence 100
   ```
 
+## Contact
+`MethylomeMiner`'s maintainers:
+* Katerina Sabatova - [@KSabatova](https://github.com/KSabatova)
+* Marketa Jakubickova - [@MakretaJakubickova](https://github.com/MarketaJakubickova)
+
+## License
+See the [LICENSE](LICENSE) file for license rights and limitations (GNU General Public License v3.0).
