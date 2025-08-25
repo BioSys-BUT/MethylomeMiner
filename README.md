@@ -31,7 +31,7 @@ sequencing data by [Dorado](https://github.com/nanoporetech/dorado) and
 2. Install `MethylomeMiner` using:
 
 ```commandline
-python -m pip install methylome_miner
+python -m pip install methylome-miner
 ```
 
 ## Usage
