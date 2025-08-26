@@ -1,17 +1,12 @@
 [project]
 name = "methylome_miner"
-version = "1.1.3"
+version = "1.1.5"
 authors = [
-    {name="Marketa Jakubickova", email="jakubickova@vut.cz"},
-    {name="Katerina Sabatova", email="sabatovak@vut.cz"},
-    {name="Michaela Zbudilova"},
-    {name="Matej Bezdicek"},
-    {name="Martina Lengerova"},
-    {name="Helena Vitkova"},
+    { name="Marketa Jakubickova", email="jakubickova@vut.cz" },
+    { name="Katerina Sabatova", email="sabatovak@vut.cz" },
 ]
 maintainers = [
-    {name="Katerina Sabatova", email="sabatovak@vut.cz"},
-    {name="Marketa Jakubickova", email="jakubickova@vut.cz"},
+    { name="Katerina Sabatova", email="sabatovak@vut.cz" }
 ]
 description = "A tool for handling DNA methylation data in extended bedMethyl format obtained from the nanopore sequencing data by Dorado and Modkit."
 readme = "README.md"

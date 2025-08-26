@@ -64,7 +64,10 @@ def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_perc
     if bed_df is None:
         return None
 
-    if min_coverage is None:
+    if min_coverage is None and bed_dir_path is None:
+        print("Provide threshold for filtering, use '--min_coverage' or '--input_bed_dir' parameter.")
+        return None
+    elif bed_dir_path is not None:
         min_coverage = calculate_median_coverage(bed_dir_path)
         if min_coverage is None:
             return None
@@ -91,13 +94,13 @@ def write_df_to_file(bed_df, file_path):
     :param Path file_path: Path to new file.
     """
     match file_path.suffix:
-        case "json":
+        case ".json":
             pd.DataFrame.to_json(bed_df, file_path)
-        case "csv":
+        case ".csv":
             bed_df.to_csv(file_path, index=False)
-        case "tsv":
+        case ".tsv":
             bed_df.to_csv(file_path, index=False, sep="\t")
-        case "bed":
+        case ".bed":
             to_bed(bed_df, file_path)
         case _:
             print("Unsupported file format. Choose from: 'json', 'csv', 'tsv' or 'bed'.")
@@ -436,7 +439,9 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
         min_percent_modified=min_percent_modified,
     )
 
-    if filtered_bed_df is not None:
+    if filtered_bed_df is None:
+        return None
+    else:
         # Check (and create) working directory for MethylomeMiner
         if not work_dir.exists():
             work_dir.mkdir(parents=True, exist_ok=True)
@@ -489,8 +494,8 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                 write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem +
                                                                    f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
 
-    print("Methylome mining done.")
-    return new_annot_df
+        print("Methylome mining done.")
+        return new_annot_df
 
 
 def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
