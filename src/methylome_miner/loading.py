@@ -1,5 +1,5 @@
 """
-Module to check and verify input files.
+Module to check and verify input files
 """
 from io import StringIO
 from pathlib import Path
@@ -11,7 +11,6 @@ from Bio import SeqIO
 
 METHYLATIONS_KEY = {"21839": "4mC", "m": "5mC", "h": "5hmCG", "a": "6mA"}
 
-# Needs optimization of data types
 BED_STRUCTURE = {
     "reference_seq": "category",
     "start_index": "int32",
@@ -52,29 +51,42 @@ def parse_bed_file(bed_file_path):
     :rtype pd.DataFrame:
     :return: Loaded extended bedMethyl table.
     """
-    bed_df_part1 = pd.read_csv(bed_file_path, sep="\t", header=None, engine="pyarrow")
-    if bed_df_part1.shape[1] != 10:
-        print("Invalid number of tab-separated columns in BedMethyl file. Please check the file.")
-        return None
-    else:
-        bed_df_part2_str = StringIO(bed_df_part1[9].str.cat(sep="\n"))
-        bed_df_part2 = pd.read_csv(bed_df_part2_str, sep=" ", header=None, engine="pyarrow")
-        if bed_df_part2.shape[1] != 9:
-            print("Invalid number of space-separated columns in BedMethyl file. Please check the file.")
-            return None
-        else:
-            bed_df = pd.concat([bed_df_part1, bed_df_part2], axis=1).drop(9, axis=1)
-            bed_df.columns = list(BED_STRUCTURE.keys())
-            bed_df = bed_df.astype(BED_STRUCTURE)
-            bed_df["modified_base_code"] = bed_df["modified_base_code"].cat.rename_categories(METHYLATIONS_KEY)
-
-            # Strand
-            for strand in bed_df["strand"].cat.categories:
-                if strand not in ("+", "-", "."):
-                    print(
-                        f"BedMethyl file must contain strand information '+', '-' or '.' in column 6."
-                        f" Please check the file.")
+    match bed_file_path.suffix:
+        case ".json":
+            bed_df = pd.read_json(bed_file_path)
+        case ".csv":
+            bed_df = pd.read_csv(bed_file_path)
+        case ".tsv":
+            bed_df = pd.read_csv(bed_file_path, sep="\t")
+        case ".bed":
+            bed_df_part1 = pd.read_csv(bed_file_path, sep="\t", header=None, engine="pyarrow")
+            if bed_df_part1.shape[1] != 10:
+                print("Invalid number of tab-separated columns in BedMethyl file. Please check the file.")
+                return None
+            else:
+                bed_df_part2_str = StringIO(bed_df_part1[9].str.cat(sep="\n"))
+                bed_df_part2 = pd.read_csv(bed_df_part2_str, sep=" ", header=None, engine="pyarrow")
+                if bed_df_part2.shape[1] != 9:
+                    print("Invalid number of space-separated columns in BedMethyl file. Please check the file.")
                     return None
+                else:
+                    bed_df = pd.concat([bed_df_part1, bed_df_part2], axis=1).drop(9, axis=1)
+                    bed_df.columns = list(BED_STRUCTURE.keys())
+                    bed_df = bed_df.astype(BED_STRUCTURE)
+                    bed_df["modified_base_code"] = bed_df["modified_base_code"].cat.rename_categories(METHYLATIONS_KEY)
+
+                    # Strand
+                    for strand in bed_df["strand"].cat.categories:
+                        if strand not in ("+", "-", "."):
+                            print(
+                                f"BedMethyl file must contain strand information '+', '-' or '.' in column 6."
+                                f" Please check the file.")
+                            return None
+        case _:
+            print("Invalid bedMethyl file format. Valid options are: 'json', 'csv', 'tsv', and 'bed'. "
+                  "Please check the file.")
+            return None
+
     return bed_df
 
 

@@ -67,7 +67,7 @@ def filter_methylations(bed_file_path, bed_dir_path, min_coverage=None, min_perc
     if min_coverage is None and bed_dir_path is None:
         print("Provide threshold for filtering, use '--min_coverage' or '--input_bed_dir' parameter.")
         return None
-    elif bed_dir_path is not None:
+    elif bed_dir_path is not None and min_coverage is None:
         min_coverage = calculate_median_coverage(bed_dir_path)
         if min_coverage is None:
             return None
@@ -117,8 +117,8 @@ def to_bed(bed_df, file_path):
     :param pd.DataFrame bed_df: BedMethyl table to be saved.
     :param Path file_path: Path to new bedMethyl file.
     """
-    tab_part = bed_df.iloc[:, :9].astype(str).agg("\t".join, axis=1)
-    space_part = bed_df.iloc[:, 9:].astype(str).agg(" ".join, axis=1)
+    tab_part = bed_df.iloc[:, :10].astype(str).agg("\t".join, axis=1)
+    space_part = bed_df.iloc[:, 10:].astype(str).agg(" ".join, axis=1)
 
     with open(file_path, mode="w") as file:
         file.write("\n".join(tab_part + " " + space_part) + "\n")
@@ -369,7 +369,9 @@ def get_methylations_stats(coding_df, non_coding_df, file_path):
     coding_stats = coding_df["modified_base_code"].value_counts()
     non_coding_stats = non_coding_df["modified_base_code"].value_counts()
 
-    methylations = sorted(set(coding_df["modified_base_code"].unique()).union(non_coding_df["modified_base_code"].unique()))
+    methylations = sorted(
+        set(coding_df["modified_base_code"].unique()).union(non_coding_df["modified_base_code"].unique())
+    )
     ref_seqs = sorted(set(coding_df["reference_seq"].unique()).union(non_coding_df["reference_seq"].unique()))
 
     stats = {"genome": file_path.stem}
@@ -393,15 +395,16 @@ def get_methylations_stats(coding_df, non_coding_df, file_path):
         for methylation in methylations:
             row[f"{methylation}_coding_count"] = ref_seq_coding_stats[ref_seq][methylation]
             row[f"{methylation}_non_coding_count"] = ref_seq_non_coding_stats[ref_seq][methylation]
-            row[f"{methylation}_total_count"] = ref_seq_coding_stats[ref_seq][methylation] + ref_seq_non_coding_stats[ref_seq][methylation]
+            row[f"{methylation}_total_count"] = ref_seq_coding_stats[ref_seq][methylation] + \
+                                                ref_seq_non_coding_stats[ref_seq][methylation]
             total_count = total_count + row[f"{methylation}_total_count"]
         row["total_count"] = total_count
         ref_seq_stats.append(row)
     ref_seq_stats_df = pd.DataFrame(ref_seq_stats)
 
     # Write statistics to CSV files
-    write_df_to_file(stats_df, file_path.with_stem(file_path.stem + f"_{STATS_FILE_NAME}.csv"))
-    write_df_to_file(ref_seq_stats_df, file_path.with_stem(file_path.stem + f"_{STATS_REF_SEQS_FILE_NAME}.csv"))
+    write_df_to_file(stats_df, file_path.with_stem(f"{file_path.stem}_{STATS_FILE_NAME}.csv"))
+    write_df_to_file(ref_seq_stats_df, file_path.with_stem(f"{file_path.stem}_{STATS_REF_SEQS_FILE_NAME}.csv"))
 
 
 def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_coverage, min_percent_modified,
@@ -454,7 +457,7 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
 
         # Save filtered bedMethyl table if requested
         if write_filtered_bed:
-            bed_file_path = file_path.with_stem(file_path.stem + f"_{FILTERED_BED_FILE_NAME}.{filtered_bed_format}")
+            bed_file_path = file_path.with_stem(f"{file_path.stem}_{FILTERED_BED_FILE_NAME}.{filtered_bed_format}")
             write_df_to_file(filtered_bed_df, bed_file_path)
 
         # Parse genome annotation file
@@ -477,33 +480,87 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
                     new_annot_df_part = new_annot_df[new_annot_df["record_id"] == ref_seq]
 
                     write_df_to_file(coding_df_part, file_path.with_stem(
-                        file_path.stem + f"_{ref_seq}_coding.csv"))
+                        f"{file_path.stem}_{ref_seq}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
                     write_df_to_file(non_coding_df_part, file_path.with_stem(
-                        file_path.stem + f"_{ref_seq}_non_coding.csv"))
+                        f"{file_path.stem}_{ref_seq}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
                     write_df_to_file(new_annot_df_part, file_path.with_stem(
-                        file_path.stem + f"_{ref_seq}_all_annot_with_coding_methylations.csv"))
+                        f"{file_path.stem}_{ref_seq}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
 
             else:
                 # Store all results
                 if write_all:
-                    write_df_to_file(coding_df, file_path.with_stem(file_path.stem +
-                                                                    f"_{CODING_METHYLATIONS_FILE_NAME}.csv"))
-                    write_df_to_file(non_coding_df, file_path.with_stem(file_path.stem +
-                                                                        f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    write_df_to_file(coding_df, file_path.with_stem(
+                        f"{file_path.stem}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    write_df_to_file(non_coding_df, file_path.with_stem(
+                        f"{file_path.stem}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
+
                 # Write always because of panmethylome
-                write_df_to_file(new_annot_df, file_path.with_stem(file_path.stem +
-                                                                   f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
+                write_df_to_file(new_annot_df, file_path.with_stem(
+                    f"{file_path.stem}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
 
         print("Methylome mining done.")
         return new_annot_df
 
 
-def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
+def get_pangenome_genes(roary_df, annot_df, genome_name_abbr, work_dir, annot_file):
+    """
+    Get list of pangenome genes for one genome, verify genes' names in extended annotation and if needed,
+    use new annotation (e.g. fixed annotation from Roary)
+
+    :param pd.DataFrame roary_df: Results of pangenome analysis by Roary.
+    :param pd.DataFrame annot_df: Extended annotation with added base modification positions.
+    :param str genome_name_abbr: Prefix or genome name used to distinguish samples in pangenome analysis.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param Path annot_file: Path to a file with genome annotation in 'gff' (v3) or 'gbk' file format.
+    :return: (new)valid_genes, (new)annot_df
+
+        - (new)valid_genes - a pd.Series with names of genes included in pangenome analysis for anqlyzed genome.
+        - (new)annot_df - a pd.DataFrame with extended annotation with added base modification positions.
+    """
+    valid_genes = roary_df[pd.notna(roary_df) & roary_df.isin(annot_df["gene_id"])]
+
+    if len(valid_genes) / len(annot_df["gene_id"]) < 0.9:
+        print(
+            f"Genes' annotations are not matching between input annotation file and Roary file. "
+            f"Running MethylomeMiner for new annotation file {annot_file}."
+        )
+
+        # Load new annotation file
+        new_annot_df = parse_annotation_file(annot_file)
+
+        # Check intersection of Roary file and new annotation
+        new_valid_genes = roary_df[pd.notna(roary_df) & roary_df.isin(new_annot_df["gene_id"])]
+
+        if len(new_valid_genes) / len(new_annot_df["gene_id"]) > 0.9:
+            # Load filtered bedMethyl file
+            filtered_bed_files_options = [
+                Path(work_dir, f"{genome_name_abbr}_{FILTERED_BED_FILE_NAME}.{extension}")
+                for extension in ("json", "tsv", "csv", "bed")
+            ]
+            available_files = [file for file in filtered_bed_files_options if file.exists()]
+            filtered_bed_df = parse_bed_file(available_files[0])
+
+            # Sort methylation according to new annotation
+            coding_df, non_coding_df, new_annot_df = sort_methylations(filtered_bed_df, new_annot_df)
+            write_df_to_file(new_annot_df,
+                             Path(work_dir, f"{genome_name_abbr}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
+
+            return new_valid_genes, new_annot_df
+
+        else:
+            print(f"Genes' annotations are still not matching between Roary and annotation file {annot_file}.")
+            return None, None
+    else:
+        return valid_genes, annot_df
+
+
+def get_panmethylome(roary_output_file, files_pairs, work_dir, matrix_values):
     """
     Create panmethylome for all base modification types
 
     :param Path roary_output_file: Path to output file from Roary tool named 'gene_presence_absence.csv'.
-    :param Path miner_output_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
+    :param dict files_pairs: Prefix oriented dictionary for pairs of Paths to bedMethyl file and genome annotation file.
     :param str matrix_values: Type of values in the output panmethylome matrix. Options: 'presence': '0' value for
          no detected base modifications, '1' value for detected base modification, 'positions': a list of exact 
          locations of base modifications within a pangenome genes. Default is 'presence' option.
@@ -514,17 +571,27 @@ def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
     """
     # Load results from Roary
     roary_df = pd.read_csv(roary_output_file)
-    
+
     # Prepare output dictionary with DataFrames 
     panmethylomes = {methylation: roary_df["Gene"].to_frame() for methylation in METHYLATIONS_KEY.values()}
     
     # Fill DataFrames based on results from MethylomeMiner, more precisely files with extended annotation
-    for annot_df_file in list(Path(miner_output_dir).glob(f"*_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv")):
-        
-        annot_df = pd.read_csv(annot_df_file)
-        
+    for genome_name_abbr in files_pairs:
+
+        annot_df = pd.read_csv(Path(work_dir, f"{genome_name_abbr}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
         methylation_types = annot_df.iloc[:, 7:].columns
-        genome_name_abbr = annot_df_file.stem.split("_")[0]
+
+        # Get column from Roary file that corresponds to current extended annotation DataFrame
+        col_names = list(roary_df.filter(regex=genome_name_abbr).columns)
+        if len(col_names) != 1:
+            print("Invalid column names in Roary file.")
+            return None
+
+        # Find pangenome genes in the extended annotation
+        valid_genes, annot_df = get_pangenome_genes(roary_df[col_names[0]], annot_df, genome_name_abbr, work_dir,
+                                                    files_pairs[genome_name_abbr]["annot_file"])
+        if valid_genes is None:
+            return None
 
         # For each extended annotation file, add found modifications to correct pangenome gene
         for methylation, panmethylome in panmethylomes.items():
@@ -533,23 +600,13 @@ def get_panmethylome(roary_output_file, miner_output_dir, matrix_values):
 
             if methylation in methylation_types:
 
-                # Get column from Roary file that corresponds to current extended annotation DataFrame
-                col_names = list(roary_df.filter(regex=genome_name_abbr).columns)
-                if len(col_names) != 1:
-                    print("Invalid column names in Roary file.")
-                    return None
-
-                # Find pangenome genes in the extended annotation
-                valid_genes = roary_df[col_names[0]][
-                    pd.notna(roary_df[col_names[0]]) & roary_df[col_names[0]].isin(annot_df["gene_id"])]
-
                 # Add found base modifications' positions to pangenome genes
                 panmethylome.loc[valid_genes.index, genome_name_abbr] = valid_genes.map(
                     annot_df.set_index("gene_id")[methylation])
 
                 # Change lists of positions to '0' and '1' values, if requested
                 if matrix_values == "presence":
-                    panmethylome.loc[panmethylome[genome_name_abbr] == "[]", genome_name_abbr] = 0
+                    panmethylome.loc[panmethylome[genome_name_abbr].astype(str) == "[]", genome_name_abbr] = 0
                     panmethylome.loc[(panmethylome[genome_name_abbr] != 0) & ~panmethylome[
                         genome_name_abbr].isna(), genome_name_abbr] = 1
                 elif matrix_values == "positions":
@@ -572,8 +629,8 @@ def get_panmethylations_stats(work_dir, prefixes):
     stats = []
     ref_seq_stats = []
     for prefix in prefixes:
-        stats.append(pd.read_csv(Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv")))
-        ref_seq_stats.append(pd.read_csv(Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv")))
+        stats.append(pd.read_csv(Path(work_dir, f"{prefix}_{STATS_FILE_NAME}.csv")))
+        ref_seq_stats.append(pd.read_csv(Path(work_dir, f"{prefix}_{STATS_REF_SEQS_FILE_NAME}.csv")))
     stats_df = pd.concat(stats)
     ref_seq_stats_df = pd.concat(ref_seq_stats)
 
@@ -610,21 +667,21 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
         print("No matching bedMethyl and annotation files found.")
 
     for prefix, files in files_pairs.items():
+        miner_file_exists = {
+            "coding": Path(work_dir, f"{prefix}_{CODING_METHYLATIONS_FILE_NAME}.csv").exists(),
+            "non_coding": Path(work_dir, f"{prefix}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv").exists(),
+            "annot_coding": Path(work_dir, f"{prefix}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists(),
+            "filtered_bed": any(
+                [Path(work_dir, f"{prefix}_{FILTERED_BED_FILE_NAME}.{extension}").exists()
+                 for extension in ("json", "tsv", "csv", "bed")]
+            ),
+            "stats": Path(work_dir, f"{prefix}_{STATS_FILE_NAME}.csv").exists(),
+            "stats_ref":  Path(work_dir, f"{prefix}_{STATS_REF_SEQS_FILE_NAME}.csv").exists(),
+        }
         # Check if it is necessary to run MethylomeMiner
-        if ((write_all_results and (
-                not Path(work_dir, prefix + f"_{CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{NON_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{FILTERED_BED_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv").exists()
-        )) or (
-                not write_all_results and (
-                not Path(work_dir, prefix + f"_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{STATS_FILE_NAME}.csv").exists() or
-                not Path(work_dir, prefix + f"_{STATS_REF_SEQS_FILE_NAME}.csv").exists()
-        ))
-        ):
+        if ((write_all_results and not all(miner_file_exists.values())) or
+                (not write_all_results and (not miner_file_exists["annot_coding"] or not miner_file_exists["stats"] or
+                                            not miner_file_exists["stats_ref"]))):
             # Before running MethylomeMiner, check is minimum coverage was set, if not calculate median coverage
             # and use it for filtration
             if min_coverage is None:
@@ -642,26 +699,28 @@ def _mine_panmethylations(input_bed_dir, input_annot_dir, roary_file, min_covera
                 work_dir=work_dir,
                 file_name=prefix,
                 write_filtered_bed=write_all_results,
-                filtered_bed_format="csv",
+                filtered_bed_format="bed",
                 write_all=write_all_results,
                 split_by_reference=False,
             )
 
     # Create panmethylomes for all present base modifications
-    panmethylomes = get_panmethylome(roary_file, miner_output_dir=work_dir, matrix_values=matrix_values)
+    panmethylomes = get_panmethylome(roary_file, files_pairs, work_dir, matrix_values)
 
-    # For each base modification save individual output files
-    for methylation, panmethylome in panmethylomes.items():
-        if not panmethylome.iloc[:, 1:].isnull().values.all():
-            # Panmethylome matrix
-            write_df_to_file(panmethylome, Path(work_dir, methylation + "_panmethylome_" + matrix_values + ".csv"))
-            # Heatmap(s)
-            if heatmap_type and matrix_values == "presence":
-                generate_heatmaps(panmethylome, methylation, work_dir, type=heatmap_type, file_format=heatmap_file_format,
-                                  min_percent_presence=heatmap_min_percent_presence)
+    if panmethylomes is not None:
+        # For each base modification save individual output files
+        for methylation, panmethylome in panmethylomes.items():
+            if not panmethylome.iloc[:, 1:].isnull().values.all():
+                # Panmethylome matrix
+                write_df_to_file(panmethylome, Path(work_dir, f"{methylation}_panmethylome_{matrix_values}.csv"))
+                # Heatmap(s)
+                if heatmap_type and matrix_values == "presence":
+                    generate_heatmaps(panmethylome, methylation, work_dir, type=heatmap_type,
+                                      file_format=heatmap_file_format,
+                                      min_percent_presence=heatmap_min_percent_presence)
 
-    # Get panmethylome statistics
-    get_panmethylations_stats(work_dir, files_pairs.keys())
+        # Get panmethylome statistics
+        get_panmethylations_stats(work_dir, files_pairs.keys())
 
     print("Panmethylome mining done.")
 
@@ -673,7 +732,7 @@ def generate_heatmaps(panmethylome_df, methylation, work_dir, type, file_format,
     :param pd.DataFrame panmethylome_df: Panmethylome matrix with 'presence' values.
     :param str methylation: Name of the methylation for which panmethylome was created.
     :param Path work_dir: Path to directory for (Pan)MethylomeMiner outputs.
-    :param type: Choose which heatmap(s) of panmethylome should be created.
+    :param str type: Choose which heatmap(s) of panmethylome should be created.
         Options:
          'compact': heatmap of panmethylome in lower resolution without genes' names,
          'full': heatmap of panmethylome in full resolution with genes' names,
@@ -714,7 +773,7 @@ def create_heatmap(filtered_panmethylome_df, methylation, work_dir, type, file_f
     :param str file_format: File format of heatmap(s) to be created.
     :param float min_percent_presence: Minimum required percentage of genomes where are genes present.
     """
-    sys.setrecursionlimit(4000)
+    sys.setrecursionlimit(5000)
 
     blue = (0/255, 114/255, 178/255)
     yellow = (253/255, 179/255, 56/255)
