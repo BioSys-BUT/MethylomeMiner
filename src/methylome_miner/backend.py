@@ -302,11 +302,20 @@ def sort_coding_non_coding_methylations(bed_df, annot_df):
         prev_annot = annot
 
     # Concat all partial DataFrames
-    coding_df = pd.concat(coding_parts)
-    non_coding_df = pd.concat(non_coding_parts)
+    if coding_parts:
+        coding_df = pd.concat(coding_parts)
+    else:
+        coding_df = None
+
+    if non_coding_parts:
+        non_coding_df = pd.concat(non_coding_parts)
+    else:
+        non_coding_df = None
+
     new_annot_df = pd.concat(new_annot_parts)
 
     return coding_df, non_coding_df, new_annot_df
+
 
 def sort_methylations(bed_df, annot_df):
     """
@@ -345,12 +354,22 @@ def sort_methylations(bed_df, annot_df):
 
         coding_df, non_coding_df, new_annot_df = sort_coding_non_coding_methylations(bed_df_group, annot_df_group)
 
-        all_coding.append(coding_df)
-        all_non_coding.append(non_coding_df)
+        if coding_df is not None:
+            all_coding.append(coding_df)
+        if non_coding_df is not None:
+            all_non_coding.append(non_coding_df)
         new_annots.append(new_annot_df)
 
-    all_coding_df = pd.concat(all_coding).sort_values(by=["reference_seq", "start_index"])
-    all_non_coding_df = pd.concat(all_non_coding).sort_values(by=["reference_seq", "start_index"])
+    if all_coding:
+        all_coding_df = pd.concat(all_coding).sort_values(by=["reference_seq", "start_index"])
+    else:
+        all_coding_df = None
+
+    if all_non_coding:
+        all_non_coding_df = pd.concat(all_non_coding).sort_values(by=["reference_seq", "start_index"])
+    else:
+        all_non_coding_df = None
+
     new_annot_df = pd.concat(new_annots).sort_values(by=["record_id", "start"])
 
     return all_coding_df, all_non_coding_df, new_annot_df
@@ -475,24 +494,29 @@ def _mine_methylations(input_bed_file, input_annot_file, input_bed_dir, min_cove
 
                 reference_seqs = new_annot_df["record_id"].astype("category").cat.categories
                 for ref_seq in reference_seqs:
-                    coding_df_part = coding_df[coding_df["reference_seq"] == ref_seq]
-                    non_coding_df_part = non_coding_df[non_coding_df["reference_seq"] == ref_seq]
-                    new_annot_df_part = new_annot_df[new_annot_df["record_id"] == ref_seq]
+                    if coding_df is not None:
+                        coding_df_part = coding_df[coding_df["reference_seq"] == ref_seq]
+                        write_df_to_file(coding_df_part, file_path.with_stem(
+                            f"{file_path.stem}_{ref_seq}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
 
-                    write_df_to_file(coding_df_part, file_path.with_stem(
-                        f"{file_path.stem}_{ref_seq}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
-                    write_df_to_file(non_coding_df_part, file_path.with_stem(
-                        f"{file_path.stem}_{ref_seq}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    if non_coding_df is not None:
+                        non_coding_df_part = non_coding_df[non_coding_df["reference_seq"] == ref_seq]
+                        write_df_to_file(non_coding_df_part, file_path.with_stem(
+                            f"{file_path.stem}_{ref_seq}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
+
+                    new_annot_df_part = new_annot_df[new_annot_df["record_id"] == ref_seq]
                     write_df_to_file(new_annot_df_part, file_path.with_stem(
                         f"{file_path.stem}_{ref_seq}_{ANNOT_WITH_CODING_METHYLATIONS_FILE_NAME}.csv"))
 
             else:
                 # Store all results
                 if write_all:
-                    write_df_to_file(coding_df, file_path.with_stem(
-                        f"{file_path.stem}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
-                    write_df_to_file(non_coding_df, file_path.with_stem(
-                        f"{file_path.stem}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    if coding_df is not None:
+                        write_df_to_file(coding_df, file_path.with_stem(
+                            f"{file_path.stem}_{CODING_METHYLATIONS_FILE_NAME}.csv"))
+                    if non_coding_df is not None:
+                        write_df_to_file(non_coding_df, file_path.with_stem(
+                            f"{file_path.stem}_{NON_CODING_METHYLATIONS_FILE_NAME}.csv"))
 
                 # Write always because of panmethylome
                 write_df_to_file(new_annot_df, file_path.with_stem(
