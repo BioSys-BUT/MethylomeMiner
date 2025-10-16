@@ -18,7 +18,7 @@ sequencing data by [Dorado](https://github.com/nanoporetech/dorado) and
 
 ## Features
 
-* Filter bedMethyl tables based on valid coverage and the probability of base modification.
+* Filter bedMethyl tables based on valid coverage and the methylation rate.
 * Sort base modifications into coding and non-coding types using genome annotation.
 * Split base modifications according to reference sequences.
 * Provide count statistics for each base modification, coding/non-coding types and reference sequence.
@@ -41,7 +41,7 @@ by `MethylomeMiner` to create panmethylome.
 
 ## MethylomeMiner
 
-The primary use of `MethylomeMiner` is to filter out base modifications with low coverage and low probability
+The primary use of `MethylomeMiner` is to filter out base modifications with low coverage and low rate
 of base modification and to sort methylations into coding and non-coding groups. So-called *coding* methylations are
 base modifications that are located in some coding region of the genome. On the other hand *non-coding* methylations
 are found between coding parts of the genome.
