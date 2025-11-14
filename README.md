@@ -15,6 +15,7 @@ sequencing data by [Dorado](https://github.com/nanoporetech/dorado) and
   - [PanMethylomeMiner](#PanMethylomeMiner)
 - [Contact](#contact)
 - [License](#license)
+- [Citation](#citation)
 
 ## Features
 
@@ -442,6 +443,16 @@ in pangenome dataset. Therefore, two CSV files are created:
   ```commandline
   PanMethylomeMiner --input_bed_dir path\to\bed_dir --input_annot_dir path\to\annot_dir --roary_file path\to\gene_presence_absence.csv --heatmap_type both --heatmap_file_format svg --heatmap_min_percent_presence 100
   ```
+
+## Citation
+If you use `MethylomeMiner` in your research, please cite the following article:
+
+> Jakubickova, M., Sabatova, K., Zbudilova, M., Bezdicek, M., Lengerova, M., Vitkova, H.
+> MethylomeMiner: A novel tool for high-resolution analysis of bacterial methylation patterns from nanopore sequencing.
+> Computational and Structural Biotechnology Journal, 27 (2025), pp. 4753–4759.
+> [https://doi.org/10.1016/j.csbj.2025.10.047](https://doi.org/10.1016/j.csbj.2025.10.047)
+
+Formal citation metadata are available in the `CITATION.cff` file and via the <kbd>Cite this repository</kbd> button.
 
 ## Contact
 `MethylomeMiner`'s maintainers:

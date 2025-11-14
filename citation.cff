@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: If you use MethylomeMiner, please cite it using these metadata.
+authors:
+  - family-names: Jakubickova
+    given-names: Marketa
+    orcid: "https://orcid.org/0000-0002-0205-6935"
+  - family-names: Sabatova
+    given-names: Katerina
+    orcid: "https://orcid.org/0000-0001-5143-9521"
+  - family-names: Zbudilova
+    given-names: Michaela
+  - family-names: Bezdicek
+    given-names: Matej
+    orcid: "https://orcid.org/0000-0002-5833-8325"
+  - family-names: Lengerova
+    given-names: Martina
+    orcid: "https://orcid.org/0000-0001-8739-9998"
+  - family-names: Vitkova
+    given-names: Helena
+    orcid: "https://orcid.org/0000-0003-4562-2746"
+title: MethylomeMiner
+version: 1.1.7
+doi: 10.1016/j.csbj.2025.10.047
+date-released: "2025-11-03"
+url: "https://github.com/BioSys-BUT/MethylomeMiner"
+preferred-citation:
+  type: article
+  title: "MethylomeMiner: A novel tool for high-resolution analysis of bacterial methylation patterns from nanopore sequencing"
+  authors:
+  - family-names: Jakubickova
+    given-names: Marketa
+    orcid: "https://orcid.org/0000-0002-0205-6935"
+  - family-names: Sabatova
+    given-names: Katerina
+    orcid: "https://orcid.org/0000-0001-5143-9521"
+  - family-names: Zbudilova
+    given-names: Michaela
+  - family-names: Bezdicek
+    given-names: Matej
+    orcid: "https://orcid.org/0000-0002-5833-8325"
+  - family-names: Lengerova
+    given-names: Martina
+    orcid: "https://orcid.org/0000-0001-8739-9998"
+  - family-names: Vitkova
+    given-names: Helena
+    orcid: "https://orcid.org/0000-0003-4562-2746"
+  journal: Computational and Structural Biotechnology Journal
+  year: 2025
+  volume: 27
+  start: 4753
+  end: 4759
+  doi: "10.1016/j.csbj.2025.10.047"
+  url: "https://www.sciencedirect.com/science/article/pii/S2001037025004507"
+  issn: 2001-0370
